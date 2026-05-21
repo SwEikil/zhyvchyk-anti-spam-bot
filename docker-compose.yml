@@ -1,0 +1,10 @@
+services:
+  anti-spam-bot:
+    build: .
+    container_name: anti-spam-bot
+    restart: unless-stopped
+    environment:
+      ANTISPAM_Bot__Token: "${DISCORD_BOT_TOKEN}"
+      ANTISPAM_Bot__DataDirectory: "/app/data"
+    volumes:
+      - ./data:/app/data

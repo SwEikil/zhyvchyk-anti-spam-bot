@@ -1,0 +1,8 @@
+bin/
+obj/
+data/
+work-log/
+.git/
+.github/
+.env
+appsettings.json

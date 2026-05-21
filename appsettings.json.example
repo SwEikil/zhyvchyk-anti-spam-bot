@@ -1,0 +1,111 @@
+{
+  "Bot": {
+    "Token": "PUT_DISCORD_BOT_TOKEN_HERE",
+    "RegisterGuildCommandsOnReady": true,
+    "DataDirectory": "data",
+    "DefaultSettings": {
+      "Language": "en",
+      "Access": {
+        "OwnerOnlyBootstrap": true,
+        "AllowDiscordAdministratorsAfterSetup": true,
+        "CommandVisibility": "AdministratorOnly",
+        "ManagerRoleIds": []
+      },
+      "Channels": {
+        "Mode": "AllExceptIgnored",
+        "SelectedChannelIds": [],
+        "IgnoredChannelIds": [],
+        "LogChannelId": null,
+        "NotificationChannelId": null
+      },
+      "Detection": {
+        "Enabled": true,
+        "TimeWindowSeconds": 10,
+        "CleanupIntervalSeconds": 30,
+        "MinimumSpamCount": 3,
+        "MaxMessagesBeforePunishment": 5,
+        "SimilarityThreshold": 0.86,
+        "RequireMultipleChannels": true,
+        "MassMentionThreshold": 1,
+        "RepeatedLinkThreshold": 2,
+        "RepeatedAttachmentThreshold": 2,
+        "StripPunctuation": true,
+        "StripEmoji": true,
+        "StripInvisibleCharacters": true
+      },
+      "Punishment": {
+        "EnableTimeout": true,
+        "EnableBan": false,
+        "EnablePermanentBan": false,
+        "TimeoutDurationsSeconds": [600, 3600, 86400],
+        "TimeoutDurationsMinutes": [],
+        "TempBanDurationsSeconds": [3600, 86400, 604800],
+        "BanAfterDetections": 4,
+        "BanDeleteMessageDays": 0,
+        "DmUserBeforeBan": true,
+        "BanDmTemplate": "You were temporarily banned from {guild} until {until}. Reason: {reason}",
+        "CooldownSeconds": 60,
+        "ReasonTemplate": "Coordinated spam detected: {reason}"
+      },
+      "RaidLockdown": {
+        "Enabled": true,
+        "EnableSlowmode": true,
+        "SlowmodeSeconds": 10,
+        "EnableTemporaryChannelLock": false,
+        "DurationSeconds": 300,
+        "MinimumHoldSeconds": 60,
+        "AutoReleaseWhenThreatDrops": true,
+        "ReleaseWhenAtOrBelow": "Suspicious",
+        "MonitorIntervalSeconds": 10,
+        "MinimumThreatLevel": "UnderAttack"
+      },
+      "ScamLinks": {
+        "Enabled": true,
+        "BlacklistedDomains": [],
+        "ProtectedDomains": ["discord.com", "discord.gg", "steamcommunity.com"],
+        "FuzzyDomainThreshold": 0.88,
+        "ConfusableDetectionEnabled": true,
+        "LeetspeakDetectionEnabled": true
+      },
+      "UserRisk": {
+        "Enabled": true,
+        "NewAccountAgeHours": 24,
+        "RecentJoinMinutes": 10,
+        "PunishAtScore": 70
+      },
+      "Attachments": {
+        "SuspiciousExtensionFilteringEnabled": true,
+        "HashingEnabled": false,
+        "SuspiciousExtensions": [".exe", ".scr", ".bat", ".cmd", ".ps1", ".js", ".vbs", ".jar", ".apk", ".msi", ".dll"]
+      },
+      "ThreatLevels": {
+        "Enabled": true,
+        "WindowSeconds": 60,
+        "SuspiciousScore": 3,
+        "UnderAttackScore": 6,
+        "CriticalScore": 12
+      },
+      "DryRun": {
+        "Enabled": false
+      },
+      "LocalLogging": {
+        "Enabled": true,
+        "Directory": "logs"
+      },
+      "Backups": {
+        "AutomaticBackupsEnabled": true,
+        "Directory": "backups",
+        "MaxBackupsPerGuild": 20
+      },
+      "AntiNuke": {
+        "Enabled": true,
+        "WindowSeconds": 60,
+        "MaxDestructiveActions": 4,
+        "TriggerLockdown": true,
+        "IgnoreBotManagers": true,
+        "TrustedUserIds": [],
+        "TrustedRoleIds": []
+      }
+    }
+  }
+}
