@@ -10,7 +10,7 @@ Most server settings can be changed from `/antispam`.
 - Raid Lockdown: slowmode, minimum hold, max duration, trigger threat level, release threat level.
 - Scam Links: protected domains, blacklist, fuzzy threshold, Unicode tricks, leetspeak.
 - User Risk: new account age, recent join window, punish score.
-- Logs and Access: moderation log channel, notification channel, manager roles, ignored roles, whitelisted users.
+- Logs and Access: moderation log channel, admin notification channel, admin ping role, manager roles, ignored roles, whitelisted users.
 - Language: English or Ukrainian.
 
 ## Config Files

@@ -95,6 +95,7 @@ public sealed partial class SetupUiService(
             $"{localizer.Get(settings, "status_channel_mode")}: `{settings.Channels.Mode}`\n" +
             $"{localizer.Get(settings, "status_log_channel")}: `{FormatChannel(settings.Channels.LogChannelId, settings)}`\n" +
             $"{localizer.Get(settings, "status_notification_channel")}: `{FormatChannel(settings.Channels.NotificationChannelId, settings)}`\n" +
+            $"{localizer.Get(settings, "status_admin_ping_role")}: `{FormatRole(settings.Notifications.AdminPingRoleId, settings)}`\n" +
             $"{localizer.Get(settings, "status_time_window")}: `{settings.Detection.TimeWindowSeconds}s`\n" +
             $"{localizer.Get(settings, "status_similarity")}: `{settings.Detection.SimilarityThreshold:0.00}`\n" +
             $"{localizer.Get(settings, "status_minimum_count")}: `{settings.Detection.MinimumSpamCount}`\n" +
@@ -219,6 +220,9 @@ public sealed partial class SetupUiService(
             case $"{Prefix}:notification_channel":
                 await UpdateNotificationChannelAsync(component, user.Guild.Id);
                 break;
+            case $"{Prefix}:admin_ping_role":
+                await UpdateAdminPingRoleAsync(component, user.Guild.Id);
+                break;
             case $"{Prefix}:language":
                 await UpdateLanguageAsync(component, user.Guild.Id);
                 break;
@@ -257,6 +261,16 @@ public sealed partial class SetupUiService(
                         .WithColor(Color.DarkBlue)
                         .Build(),
                     components: BuildAdminPanelComponents(settings),
+                    ephemeral: true);
+                break;
+            case $"{Prefix}:open_protection_panel":
+                await component.RespondAsync(
+                    embed: new EmbedBuilder()
+                        .WithTitle(localizer.Get(settings, "protection_panel_title"))
+                        .WithDescription(localizer.Get(settings, "protection_panel_description"))
+                        .WithColor(Color.DarkBlue)
+                        .Build(),
+                    components: BuildProtectionPanelComponents(settings),
                     ephemeral: true);
                 break;
             case $"{Prefix}:help":
@@ -391,6 +405,18 @@ public sealed partial class SetupUiService(
         {
             settings.SetupCompleted = true;
             settings.Channels.NotificationChannelId = id == 0 ? null : id;
+        });
+
+        await ReplySavedAsync(component);
+    }
+
+    private async Task UpdateAdminPingRoleAsync(SocketMessageComponent component, ulong guildId)
+    {
+        var id = component.Data.Roles?.FirstOrDefault()?.Id ?? ParseUlongValues(component.Data.Values).FirstOrDefault();
+        await settingsStore.UpdateAsync(guildId, settings =>
+        {
+            settings.SetupCompleted = true;
+            settings.Notifications.AdminPingRoleId = id == 0 ? null : id;
         });
 
         await ReplySavedAsync(component);
@@ -870,7 +896,7 @@ public sealed partial class SetupUiService(
             "lockdown" => $"{localizer.Get(settings, "section_desc_lockdown")}\n\n{localizer.Get(settings, "status_enabled")}: `{settings.RaidLockdown.Enabled}`\n{localizer.Get(settings, "lockdown_trigger_level")}: `{settings.RaidLockdown.MinimumThreatLevel}`\n{localizer.Get(settings, "lockdown_release_level")}: `{settings.RaidLockdown.ReleaseWhenAtOrBelow}`\nSlowmode: `{settings.RaidLockdown.SlowmodeSeconds}s`\nHold: `{settings.RaidLockdown.MinimumHoldSeconds}s`, max `{settings.RaidLockdown.DurationSeconds}s`",
             "links" => $"{localizer.Get(settings, "section_desc_links")}\n\n{localizer.Get(settings, "status_enabled")}: `{settings.ScamLinks.Enabled}`\nConfusables: `{settings.ScamLinks.ConfusableDetectionEnabled}`\nLeetspeak: `{settings.ScamLinks.LeetspeakDetectionEnabled}`\nProtected: `{string.Join(", ", settings.ScamLinks.ProtectedDomains)}`\nBlacklist: `{string.Join(", ", settings.ScamLinks.BlacklistedDomains)}`",
             "risk" => $"{localizer.Get(settings, "section_desc_risk")}\n\n{localizer.Get(settings, "status_enabled")}: `{settings.UserRisk.Enabled}`\nScore: `{settings.UserRisk.PunishAtScore}`",
-            "logs" => $"{localizer.Get(settings, "section_desc_logs")}\n\n{localizer.Get(settings, "status_log_channel")}: `{FormatChannel(settings.Channels.LogChannelId, settings)}`\n{localizer.Get(settings, "status_notification_channel")}: `{FormatChannel(settings.Channels.NotificationChannelId, settings)}`",
+            "logs" => $"{localizer.Get(settings, "section_desc_logs")}\n\n{localizer.Get(settings, "status_log_channel")}: `{FormatChannel(settings.Channels.LogChannelId, settings)}`\n{localizer.Get(settings, "status_notification_channel")}: `{FormatChannel(settings.Channels.NotificationChannelId, settings)}`\n{localizer.Get(settings, "status_admin_ping_role")}: `{FormatRole(settings.Notifications.AdminPingRoleId, settings)}`",
             _ => localizer.Get(settings, "main_panel_description")
         };
 
@@ -925,9 +951,18 @@ public sealed partial class SetupUiService(
         return new ComponentBuilder()
             .WithSelectMenu($"{Prefix}:log_channel", placeholder: localizer.Get(settings, "select_log_channel"), minValues: 1, maxValues: 1, row: 0, type: ComponentType.ChannelSelect, channelTypes: [ChannelType.Text, ChannelType.News])
             .WithSelectMenu($"{Prefix}:notification_channel", placeholder: localizer.Get(settings, "select_notification_channel"), minValues: 1, maxValues: 1, row: 1, type: ComponentType.ChannelSelect, channelTypes: [ChannelType.Text, ChannelType.News])
-            .WithSelectMenu($"{Prefix}:manager_roles", placeholder: localizer.Get(settings, "select_manager_roles"), minValues: 0, maxValues: 25, row: 2, type: ComponentType.RoleSelect)
-            .WithSelectMenu($"{Prefix}:ignored_roles", placeholder: localizer.Get(settings, "select_ignored_roles"), minValues: 0, maxValues: 25, row: 3, type: ComponentType.RoleSelect)
-            .WithSelectMenu($"{Prefix}:whitelist_users", placeholder: localizer.Get(settings, "select_whitelisted_users"), minValues: 0, maxValues: 25, row: 4, type: ComponentType.UserSelect)
+            .WithSelectMenu($"{Prefix}:admin_ping_role", placeholder: localizer.Get(settings, "select_admin_ping_role"), minValues: 0, maxValues: 1, row: 2, type: ComponentType.RoleSelect)
+            .WithSelectMenu($"{Prefix}:manager_roles", placeholder: localizer.Get(settings, "select_manager_roles"), minValues: 0, maxValues: 25, row: 3, type: ComponentType.RoleSelect)
+            .WithButton(localizer.Get(settings, "protection_lists_button"), $"{Prefix}:open_protection_panel", ButtonStyle.Secondary, row: 4)
+            .Build();
+    }
+
+    private MessageComponent BuildProtectionPanelComponents(GuildSettings settings)
+    {
+        return new ComponentBuilder()
+            .WithSelectMenu($"{Prefix}:ignored_roles", placeholder: localizer.Get(settings, "select_ignored_roles"), minValues: 0, maxValues: 25, row: 0, type: ComponentType.RoleSelect)
+            .WithSelectMenu($"{Prefix}:whitelist_users", placeholder: localizer.Get(settings, "select_whitelisted_users"), minValues: 0, maxValues: 25, row: 1, type: ComponentType.UserSelect)
+            .WithButton(localizer.Get(settings, "back_to_access_button"), $"{Prefix}:open_admin_panel", ButtonStyle.Secondary, row: 2)
             .Build();
     }
 
@@ -1049,6 +1084,8 @@ public sealed partial class SetupUiService(
 
     private string FormatChannel(ulong? channelId, GuildSettings settings) => channelId is null ? localizer.Get(settings, "not_set") : $"#{channelId.Value}";
 
+    private string FormatRole(ulong? roleId, GuildSettings settings) => roleId is null ? localizer.Get(settings, "not_set") : $"@{roleId.Value}";
+
     private static string FormatTimeoutDurations(GuildSettings settings)
     {
         var seconds = settings.Punishment.TimeoutDurationsSeconds is { Count: > 0 }
@@ -1123,7 +1160,7 @@ public sealed partial class SetupUiService(
     }
 
     private static HashSet<string> SplitCsv(string value) =>
-        value.Split([',', '\n', '\r', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        value.Split(new[] { ',', '\n', '\r', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(item => item.Trim().Trim('.').ToLowerInvariant())
             .Where(item => item.Length > 0)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

@@ -22,6 +22,12 @@
 
 Бот підтримує timeout escalation і tempban escalation. Tempban state зберігається локально, щоб expired bans можна було зняти після restart.
 
+## Admin Review
+
+Moderation logs містять безпечну цитату видаленого повідомлення, summary вкладень, reupload картинок коли можливо, і quick action buttons для ban, long mute, tempban і temp mute. Mentions і links з видалених повідомлень екрануються у звітах.
+
+Однаковий spam у кількох каналах за короткий проміжок може одразу запускати autoban.
+
 ## Raid Lockdown
 
 Під час атаки бот може ввімкнути slowmode і опційно заборонити send messages для `@everyone`. Попередній channel state зберігається і відновлюється після release.

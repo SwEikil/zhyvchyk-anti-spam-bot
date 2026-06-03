@@ -43,6 +43,14 @@ public sealed partial class MessageNormalizer : IMessageNormalizer
             .Where(extension => !string.IsNullOrWhiteSpace(extension))
             .Distinct()
             .ToArray();
+        var attachments = message.Attachments
+            .Select(attachment => new TrackedAttachment(
+                attachment.Url,
+                attachment.Filename,
+                attachment.ContentType,
+                attachment.Size,
+                attachment.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true))
+            .ToArray();
 
         return new TrackedMessage(
             guildId,
@@ -56,6 +64,7 @@ public sealed partial class MessageNormalizer : IMessageNormalizer
             mentions,
             attachmentKeys,
             attachmentExtensions,
+            attachments,
             message.MentionedEveryone,
             message.Timestamp);
     }

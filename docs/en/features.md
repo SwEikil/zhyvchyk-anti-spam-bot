@@ -22,6 +22,12 @@ Examples:
 
 The bot supports timeout escalation and tempban escalation. Tempban state is stored locally so expired bans can be removed after restart.
 
+## Admin Review
+
+Moderation logs include a safe deleted-message quote, attachment summary, reuploaded images when possible, and quick action buttons for ban, long mute, tempban, and temp mute. Mentions and links from deleted messages are escaped in reports.
+
+Duplicate spam across several channels in a short window can trigger an immediate autoban.
+
 ## Raid Lockdown
 
 During attacks, the bot can enable slowmode and optionally deny sending messages for `@everyone`. Previous channel state is stored and restored after release.

@@ -135,6 +135,15 @@ public sealed class DiscordEventHandler(
                     await HandleSlashCommandAsync(command);
                     break;
                 case SocketMessageComponent component:
+                    if (component.User is SocketGuildUser componentUser)
+                    {
+                        var settings = await settingsStore.GetAsync(componentUser.Guild.Id);
+                        if (await moderation.HandleComponentAsync(component, settings))
+                        {
+                            break;
+                        }
+                    }
+
                     await setupUi.HandleComponentAsync(component);
                     break;
                 case SocketModal modal:
