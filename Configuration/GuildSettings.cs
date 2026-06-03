@@ -14,6 +14,8 @@ public sealed class GuildSettings
     public ScamLinkSettings ScamLinks { get; set; } = new();
     public UserRiskSettings UserRisk { get; set; } = new();
     public AttachmentSecuritySettings Attachments { get; set; } = new();
+    public AdminReviewSettings AdminReview { get; set; } = new();
+    public EscalationSettings Escalation { get; set; } = new();
     public ThreatLevelSettings ThreatLevels { get; set; } = new();
     public DryRunSettings DryRun { get; set; } = new();
     public LocalLoggingSettings LocalLogging { get; set; } = new();
@@ -42,8 +44,9 @@ public sealed class ChannelSettings
 
 public sealed class NotificationSettings
 {
+    public ulong? AdminPingRoleId { get; set; }
     public string AdminPingMessage { get; set; } =
-        "@here Anti-spam action: {reason}. User: {user} ({userId}). Channels: {channels}. Deleted: {deletedCount}. Punishment: {punishment}.";
+        "{role} Anti-spam action: {reason}. User: {user} ({userId}). Channels: {channels}. Deleted: {deletedCount}. Punishment: {punishment}.";
 }
 
 public sealed class DetectionSettings
@@ -128,6 +131,24 @@ public sealed class AttachmentSecuritySettings
     public bool SuspiciousExtensionFilteringEnabled { get; set; } = true;
     public bool HashingEnabled { get; set; }
     public HashSet<string> SuspiciousExtensions { get; set; } = [".exe", ".scr", ".bat", ".cmd", ".ps1", ".js", ".vbs", ".jar", ".apk", ".msi", ".dll"];
+}
+
+public sealed class AdminReviewSettings
+{
+    public bool Enabled { get; set; } = true;
+    public bool IncludeDeletedMessageQuote { get; set; } = true;
+    public bool IncludeAttachments { get; set; } = true;
+    public bool ActionButtonsEnabled { get; set; } = true;
+    public int MaxReuploadedImages { get; set; } = 3;
+    public int MaxAttachmentBytes { get; set; } = 8 * 1024 * 1024;
+}
+
+public sealed class EscalationSettings
+{
+    public bool AutoBanMultiChannelDuplicate { get; set; } = true;
+    public int MultiChannelWindowSeconds { get; set; } = 60;
+    public int MultiChannelMinimumChannels { get; set; } = 3;
+    public double SimilarityThreshold { get; set; } = 0.95;
 }
 
 public sealed class ThreatLevelSettings

@@ -12,6 +12,8 @@ Ukrainian documentation: [README.uk.md](README.uk.md)
 - Scam link detection with blacklist, fuzzy domains, confusables, and leetspeak checks
 - Repeated attachment and suspicious extension detection
 - User risk scoring for new accounts and spam-after-join behavior
+- Admin review reports with deleted-message quotes, image reuploads, and quick action buttons
+- Immediate autoban for duplicate spam sent across several channels in a short window
 - Temporary timeout/tempban escalation
 - Raid lockdown with slowmode, optional channel lock, and restart recovery
 - Anti-nuke audit-log monitoring
@@ -52,7 +54,7 @@ dotnet restore
 dotnet run
 ```
 
-8. In Discord, run `/setup` as the server owner.
+8. In Discord, run `/setup` as the server owner or a Discord administrator.
 
 ## Docker
 

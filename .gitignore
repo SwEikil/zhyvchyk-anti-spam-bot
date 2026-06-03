@@ -1,6 +1,6 @@
 .env
-appsettings.json
-appsettings.Development.json
+appsettings*.json*
+!appsettings.json.example
 data/
 work-log/
 bin/

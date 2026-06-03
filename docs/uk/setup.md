@@ -62,4 +62,4 @@ dotnet run
 /setup
 ```
 
-До завершення setup доступ має server owner. Після setup ботом можуть керувати administrators і налаштовані manager roles залежно від command visibility.
+До завершення setup доступ мають server owner і Discord administrators. Після setup ботом можуть керувати administrators і налаштовані manager roles залежно від command visibility.

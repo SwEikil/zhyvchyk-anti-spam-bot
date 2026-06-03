@@ -62,4 +62,4 @@ In Discord, run:
 /setup
 ```
 
-The server owner has access before setup is completed. After setup, administrators and configured manager roles can manage the bot depending on command visibility settings.
+The server owner and Discord administrators have access before setup is completed. After setup, administrators and configured manager roles can manage the bot depending on command visibility settings.

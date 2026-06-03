@@ -12,6 +12,8 @@ English documentation: [README.md](README.md)
 - Scam link detection з blacklist, fuzzy domains, confusables і leetspeak перевірками
 - Виявлення повторних вкладень і підозрілих розширень файлів
 - User risk scoring для нових акаунтів і spam-after-join поведінки
+- Admin review reports з цитатою видаленого повідомлення, reupload картинок і quick action buttons
+- Миттєвий autoban за однаковий spam у кількох каналах за короткий проміжок
 - Ескалація timeout/tempban
 - Raid lockdown зі slowmode, опційним channel lock і recovery після рестарту
 - Anti-nuke моніторинг audit log
@@ -52,7 +54,7 @@ dotnet restore
 dotnet run
 ```
 
-8. У Discord запустіть `/setup` від імені власника сервера.
+8. У Discord запустіть `/setup` від імені власника сервера або Discord administrator.
 
 ## Docker
 
