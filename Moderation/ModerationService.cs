@@ -81,7 +81,7 @@ public sealed class ModerationService(
 
             if (ShouldAutoBanMultiChannelDuplicate(settings, detection))
             {
-                var punishment = await BanUserAsync(guild, user.Id, user, settings, reason, cancellationToken);
+                var autoBanPunishment = await BanUserAsync(guild, user.Id, user, settings, reason, cancellationToken);
                 await localLogs.WriteAsync(guild.Id, settings, "moderation_action", new
                 {
                     userId = user.Id,
@@ -89,11 +89,11 @@ public sealed class ModerationService(
                     detection.TriggerType,
                     detection.Reason,
                     deletedCount,
-                    punishment,
+                    punishment = autoBanPunishment,
                     escalation = "auto_ban_multi_channel_duplicate",
                     channels = detection.AffectedChannelIds
                 }, cancellationToken);
-                await SendLogAsync(guild, user, settings, detection, deletedCount, punishment, reason, reportAttachments);
+                await SendLogAsync(guild, user, settings, detection, deletedCount, autoBanPunishment, reason, reportAttachments);
                 return;
             }
 
@@ -525,7 +525,7 @@ public sealed class ModerationService(
 
         return new AllowedMentions(null)
         {
-            RoleIds = new[] { roleId }
+            RoleIds = new List<ulong> { roleId }
         };
     }
 
