@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using AntiSpamBot.Configuration;
 using AntiSpamBot.Models;
 using Discord;
+using Discord.Net;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 
@@ -164,8 +165,9 @@ public sealed class RaidLockdownService(
 
                 if (!guild.CurrentUser.GetPermissions(channel).ManageChannel)
                 {
-                    failed = true;
-                    logger.LogWarning("Could not restore lockdown for channel {ChannelId}: missing Manage Channel permission.", channel.Id);
+                    logger.LogWarning(
+                        "Skipping lockdown restore for channel {ChannelId}: missing Manage Channel permission. Clearing stored lockdown state for this channel.",
+                        channel.Id);
                     continue;
                 }
 
@@ -197,6 +199,13 @@ public sealed class RaidLockdownService(
                             guild.EveryoneRole,
                             new RequestOptions { AuditLogReason = auditReason });
                     }
+                }
+                catch (HttpException exception) when (IsAccessDenied(exception))
+                {
+                    logger.LogWarning(
+                        exception,
+                        "Skipping lockdown restore for channel {ChannelId}: channel is no longer accessible. Clearing stored lockdown state for this channel.",
+                        channel.Id);
                 }
                 catch (Exception exception)
                 {
@@ -256,6 +265,8 @@ public sealed class RaidLockdownService(
     }
 
     private static bool SupportsSlowmode(SocketTextChannel channel) => channel is not SocketNewsChannel;
+
+    private static bool IsAccessDenied(HttpException exception) => (int?)exception.DiscordCode is 50001 or 50013;
 
     private sealed class LockdownState(DateTimeOffset startedAt, DateTimeOffset until, bool lockedChannels)
     {
