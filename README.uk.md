@@ -29,9 +29,9 @@ English documentation: [README.md](README.md)
 
 ## Скріншоти
 
-| Статус після встановлення | Панель `/antispam` | Панель `/help` |
+| Статус налаштованого сервера | Панель `/antispam` | Панель `/help` |
 | --- | --- | --- |
-| ![Статус антиспаму після встановлення](docs/assets/screenshots/status-fresh-install.png) | ![Панель керування антиспамом](docs/assets/screenshots/antispam-panel.png) | ![Панель допомоги антиспаму](docs/assets/screenshots/help-panel.png) |
+| ![Статус антиспаму налаштованого сервера](docs/assets/screenshots/status-configured-server.png) | ![Панель керування антиспамом](docs/assets/screenshots/antispam-panel.png) | ![Панель допомоги антиспаму](docs/assets/screenshots/help-panel.png) |
 
 ## Швидкий старт
 
