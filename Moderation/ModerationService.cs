@@ -437,25 +437,36 @@ public sealed class ModerationService(
         var components = BuildReviewComponents(settings, user.Id);
         var text = string.IsNullOrWhiteSpace(ping) ? null : ping;
         var allowedMentions = BuildAllowedMentions(settings);
-        if (reportAttachments.Count > 0)
+        try
         {
-            var files = reportAttachments
-                .Select(item => new FileAttachment(item.Stream, item.FileName))
-                .ToArray();
-            foreach (var attachment in reportAttachments)
+            if (reportAttachments.Count > 0)
             {
-                attachment.Stream.Position = 0;
+                var files = reportAttachments
+                    .Select(item => new FileAttachment(item.Stream, item.FileName))
+                    .ToArray();
+                foreach (var attachment in reportAttachments)
+                {
+                    attachment.Stream.Position = 0;
+                }
+
+                await channel.SendFilesAsync(files, text: text, embed: builtEmbed, allowedMentions: allowedMentions, components: components);
+                return;
             }
 
-            await channel.SendFilesAsync(files, text: text, embed: builtEmbed, allowedMentions: allowedMentions, components: components);
-            return;
+            await channel.SendMessageAsync(
+                text,
+                embed: builtEmbed,
+                allowedMentions: allowedMentions,
+                components: components);
         }
-
-        await channel.SendMessageAsync(
-            text,
-            embed: builtEmbed,
-            allowedMentions: allowedMentions,
-            components: components);
+        catch (HttpException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed to send moderation log in guild {GuildId} channel {ChannelId}. Check bot View Channel, Send Messages, Embed Links, and Attach Files permissions.",
+                guild.Id,
+                channel.Id);
+        }
     }
 
     private string LocalizeDetectionReason(GuildSettings settings, SpamDetectionResult detection)
