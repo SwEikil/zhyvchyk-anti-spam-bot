@@ -1,5 +1,10 @@
 # Zhyvchyk Anti-Spam Bot
 
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docs/en/docker.md)
+[![Discord.Net](https://img.shields.io/badge/Discord.Net-bot-5865F2)](https://github.com/discord-net/Discord.Net)
+
 Self-hosted Discord anti-spam and raid-protection bot built with C#, .NET 8, Discord.Net, dependency injection, JSON guild settings, and Discord-native setup menus.
 
 Ukrainian documentation: [README.uk.md](README.uk.md)
@@ -21,6 +26,12 @@ Ukrainian documentation: [README.uk.md](README.uk.md)
 - Per-guild JSON settings, import/export, backups, and local moderation logs
 - Interactive `/antispam` dashboard for non-technical server admins
 - English and Ukrainian bot UI/localization
+
+## Screenshots
+
+| Fresh install status | `/antispam` control panel | `/help` panel |
+| --- | --- | --- |
+| ![Fresh install anti-spam status](docs/assets/screenshots/status-fresh-install.png) | ![Anti-spam control panel](docs/assets/screenshots/antispam-panel.png) | ![Anti-spam help panel](docs/assets/screenshots/help-panel.png) |
 
 ## Quick Start
 
@@ -97,6 +108,8 @@ It includes the permissions needed for message monitoring, message deletion, tim
 - [Permissions](docs/en/permissions.md)
 - [Troubleshooting](docs/en/troubleshooting.md)
 - [Security](docs/en/security.md)
+- [Roadmap](ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
 
 Ukrainian docs are available in [docs/uk](docs/uk).
 
