@@ -1,5 +1,10 @@
 # Zhyvchyk Anti-Spam Bot
 
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docs/uk/docker.md)
+[![Discord.Net](https://img.shields.io/badge/Discord.Net-bot-5865F2)](https://github.com/discord-net/Discord.Net)
+
 Self-hosted Discord бот для антиспаму, raid-захисту та базового anti-nuke моніторингу. Написаний на C#, .NET 8 і Discord.Net. Налаштування зберігаються локально у JSON, а керування ботом відбувається через Discord slash-команди та інтерактивне меню `/antispam`.
 
 English documentation: [README.md](README.md)
@@ -21,6 +26,12 @@ English documentation: [README.md](README.md)
 - Per-guild JSON налаштування, import/export, backups і локальні moderation logs
 - Зручне інтерактивне меню `/antispam`
 - Англійська та українська локалізація
+
+## Скріншоти
+
+| Статус після встановлення | Панель `/antispam` | Панель `/help` |
+| --- | --- | --- |
+| ![Статус антиспаму після встановлення](docs/assets/screenshots/status-fresh-install.png) | ![Панель керування антиспамом](docs/assets/screenshots/antispam-panel.png) | ![Панель допомоги антиспаму](docs/assets/screenshots/help-panel.png) |
 
 ## Швидкий старт
 
@@ -97,6 +108,8 @@ docker compose logs -f
 - [Права Discord](docs/uk/permissions.md)
 - [Troubleshooting](docs/uk/troubleshooting.md)
 - [Security](docs/uk/security.md)
+- [Roadmap](ROADMAP.uk.md)
+- [Contributing](CONTRIBUTING.uk.md)
 
 ## Юридична інформація
 
