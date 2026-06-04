@@ -29,9 +29,9 @@ Ukrainian documentation: [README.uk.md](README.uk.md)
 
 ## Screenshots
 
-| Fresh install status | `/antispam` control panel | `/help` panel |
+| Configured server status | `/antispam` control panel | `/help` panel |
 | --- | --- | --- |
-| ![Fresh install anti-spam status](docs/assets/screenshots/status-fresh-install.png) | ![Anti-spam control panel](docs/assets/screenshots/antispam-panel.png) | ![Anti-spam help panel](docs/assets/screenshots/help-panel.png) |
+| ![Configured server anti-spam status](docs/assets/screenshots/status-configured-server.png) | ![Anti-spam control panel](docs/assets/screenshots/antispam-panel.png) | ![Anti-spam help panel](docs/assets/screenshots/help-panel.png) |
 
 ## Quick Start
 
