@@ -9,14 +9,14 @@ public sealed class LevenshteinMessageSimilarity : IMessageSimilarity
 {
     public double Compare(string left, string right)
     {
-        if (string.Equals(left, right, StringComparison.Ordinal))
-        {
-            return 1.0;
-        }
-
         if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
         {
             return 0.0;
+        }
+
+        if (string.Equals(left, right, StringComparison.Ordinal))
+        {
+            return 1.0;
         }
 
         var distance = Distance(left, right);
