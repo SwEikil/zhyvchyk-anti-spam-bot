@@ -68,7 +68,16 @@ public sealed class ModerationService(
                 messageIds = detection.Messages.Select(item => item.MessageId).ToArray(),
                 channels = detection.AffectedChannelIds
             }, cancellationToken);
-            await SendLogAsync(guild, user, settings, detection, 0, localizer.Get(settings, "punishment_dry_run"), reason, Array.Empty<ReportAttachment>());
+            await SendLogAsync(
+                guild,
+                user,
+                settings,
+                detection,
+                0,
+                localizer.Get(settings, "punishment_dry_run"),
+                reason,
+                Array.Empty<ReportAttachment>(),
+                (existingStrike?.DetectionCount ?? 0) + 1);
             return;
         }
 
@@ -79,9 +88,30 @@ public sealed class ModerationService(
         {
             var deletedCount = await DeleteDetectedMessagesAsync(guild, detection, cancellationToken);
 
-            if (ShouldAutoBanMultiChannelDuplicate(settings, detection))
+            if (isPunishmentCooldownActive)
+            {
+                // A single spam burst can generate several gateway events. The cooldown prevents
+                // duplicate punishments, but new spam messages still have to be removed.
+                await SendLogAsync(
+                    guild,
+                    user,
+                    settings,
+                    detection,
+                    deletedCount,
+                    localizer.Get(settings, "punishment_cooldown"),
+                    reason,
+                    reportAttachments,
+                    existingStrike?.DetectionCount ?? 1);
+                return;
+            }
+
+            var strike = await strikeStore.RegisterDetectionAsync(guild.Id, user.Id, cancellationToken);
+            if (ShouldAutoBanMultiChannelDuplicate(settings, detection) &&
+                settings.Punishment.BanAfterDetections > 0 &&
+                strike.DetectionCount >= settings.Punishment.BanAfterDetections)
             {
                 var autoBanPunishment = await BanUserAsync(guild, user.Id, user, settings, reason, cancellationToken);
+                await strikeStore.SetLastPunishmentAsync(guild.Id, user.Id, DateTimeOffset.UtcNow, cancellationToken);
                 await localLogs.WriteAsync(guild.Id, settings, "moderation_action", new
                 {
                     userId = user.Id,
@@ -91,21 +121,13 @@ public sealed class ModerationService(
                     deletedCount,
                     punishment = autoBanPunishment,
                     escalation = "auto_ban_multi_channel_duplicate",
+                    detectionCount = strike.DetectionCount,
                     channels = detection.AffectedChannelIds
                 }, cancellationToken);
-                await SendLogAsync(guild, user, settings, detection, deletedCount, autoBanPunishment, reason, reportAttachments);
+                await SendLogAsync(guild, user, settings, detection, deletedCount, autoBanPunishment, reason, reportAttachments, strike.DetectionCount);
                 return;
             }
 
-            if (isPunishmentCooldownActive)
-            {
-                // A single spam burst can generate several gateway events. The cooldown prevents
-                // duplicate punishments, but new spam messages still have to be removed.
-                await SendLogAsync(guild, user, settings, detection, deletedCount, localizer.Get(settings, "punishment_cooldown"), reason, reportAttachments);
-                return;
-            }
-
-            var strike = await strikeStore.RegisterDetectionAsync(guild.Id, user.Id, cancellationToken);
             var punishment = await ApplyPunishmentAsync(guild, user, settings, strike, reason, cancellationToken);
 
             await strikeStore.SetLastPunishmentAsync(guild.Id, user.Id, DateTimeOffset.UtcNow, cancellationToken);
@@ -119,7 +141,7 @@ public sealed class ModerationService(
                 punishment,
                 channels = detection.AffectedChannelIds
             }, cancellationToken);
-            await SendLogAsync(guild, user, settings, detection, deletedCount, punishment, reason, reportAttachments);
+            await SendLogAsync(guild, user, settings, detection, deletedCount, punishment, reason, reportAttachments, strike.DetectionCount);
         }
         finally
         {
@@ -152,12 +174,16 @@ public sealed class ModerationService(
 
         var reason = $"Manual anti-spam review action by {actor.Username}";
         var target = actor.Guild.GetUser(targetUserId);
+        var currentStrike = await strikeStore.GetAsync(actor.Guild.Id, targetUserId, cancellationToken);
+        var detectionCount = Math.Max(1, currentStrike?.DetectionCount ?? 1);
         var result = parts[1] switch
         {
+            "next" => await ApplyManualReviewPunishmentAsync(actor.Guild, targetUserId, target, settings, detectionCount, reason, cancellationToken),
+            "escalate" => await ApplyManualReviewPunishmentAsync(actor.Guild, targetUserId, target, settings, detectionCount + 1, reason, cancellationToken),
             "ban" => await BanUserAsync(actor.Guild, targetUserId, target, settings, reason, cancellationToken),
             "mute" => await TimeoutUserAsync(target, TimeSpan.FromDays(MaxDiscordTimeoutDays), reason),
-            "tempban" => await TempBanUserAsync(actor.Guild, targetUserId, target, settings, GetTempBanDuration(settings, 1), reason, cancellationToken),
-            "tempmute" => await TimeoutUserAsync(target, GetTimeoutDuration(settings, 1), reason),
+            "tempban" => await TempBanUserAsync(actor.Guild, targetUserId, target, settings, GetTempBanDuration(settings, detectionCount), reason, cancellationToken),
+            "tempmute" => await TimeoutUserAsync(target, GetTimeoutDuration(settings, detectionCount), reason),
             _ => ""
         };
 
@@ -175,6 +201,7 @@ public sealed class ModerationService(
             action = parts[1],
             result
         }, cancellationToken);
+        await strikeStore.SetLastPunishmentAsync(actor.Guild.Id, targetUserId, DateTimeOffset.UtcNow, cancellationToken);
 
         await component.RespondAsync($"Applied action: `{SanitizeForReport(result)}` to user `{targetUserId}`.", ephemeral: true);
         return true;
@@ -383,6 +410,29 @@ public sealed class ModerationService(
         string reason,
         IReadOnlyList<ReportAttachment> reportAttachments)
     {
+        await SendLogAsync(
+            guild,
+            user,
+            settings,
+            detection,
+            deletedCount,
+            punishment,
+            reason,
+            reportAttachments,
+            Math.Max(1, (await strikeStore.GetAsync(guild.Id, user.Id))?.DetectionCount ?? 1));
+    }
+
+    private async Task SendLogAsync(
+        SocketGuild guild,
+        SocketGuildUser user,
+        GuildSettings settings,
+        SpamDetectionResult detection,
+        int deletedCount,
+        string punishment,
+        string reason,
+        IReadOnlyList<ReportAttachment> reportAttachments,
+        int reviewDetectionCount)
+    {
         var logChannelId = settings.Channels.NotificationChannelId ?? settings.Channels.LogChannelId;
         if (logChannelId is null)
         {
@@ -434,7 +484,7 @@ public sealed class ModerationService(
         }
 
         var builtEmbed = embed.Build();
-        var components = BuildReviewComponents(settings, user.Id);
+        var components = BuildReviewComponents(settings, user.Id, Math.Max(1, reviewDetectionCount));
         var text = string.IsNullOrWhiteSpace(ping) ? null : ping;
         var allowedMentions = BuildAllowedMentions(settings);
         try
@@ -540,20 +590,71 @@ public sealed class ModerationService(
         };
     }
 
-    private static MessageComponent? BuildReviewComponents(GuildSettings settings, ulong userId)
+    private async Task<string> ApplyManualReviewPunishmentAsync(
+        SocketGuild guild,
+        ulong userId,
+        SocketGuildUser? user,
+        GuildSettings settings,
+        int detectionCount,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        if (settings.Punishment.EnableBan &&
+            settings.Punishment.BanAfterDetections > 0 &&
+            detectionCount >= settings.Punishment.BanAfterDetections)
+        {
+            if (settings.Punishment.EnablePermanentBan)
+            {
+                return await BanUserAsync(guild, userId, user, settings, reason, cancellationToken);
+            }
+
+            return await TempBanUserAsync(guild, userId, user, settings, GetTempBanDuration(settings, detectionCount), reason, cancellationToken);
+        }
+
+        if (!settings.Punishment.EnableTimeout)
+        {
+            return localizer.Get(settings, "punishment_none");
+        }
+
+        return await TimeoutUserAsync(user, GetTimeoutDuration(settings, detectionCount), reason);
+    }
+
+    private static MessageComponent? BuildReviewComponents(GuildSettings settings, ulong userId, int detectionCount)
     {
         if (!settings.AdminReview.Enabled || !settings.AdminReview.ActionButtonsEnabled)
         {
             return null;
         }
 
+        var nextLabel = $"Apply: {BuildReviewActionLabel(settings, detectionCount)}";
+        var escalateLabel = $"Escalate: {BuildReviewActionLabel(settings, detectionCount + 1)}";
+
         return new ComponentBuilder()
-            .WithButton("Ban", $"{ReviewPrefix}:ban:{userId}", ButtonStyle.Danger, row: 0)
-            .WithButton("Mute 28d", $"{ReviewPrefix}:mute:{userId}", ButtonStyle.Danger, row: 0)
-            .WithButton("Temp ban", $"{ReviewPrefix}:tempban:{userId}", ButtonStyle.Secondary, row: 0)
-            .WithButton("Temp mute", $"{ReviewPrefix}:tempmute:{userId}", ButtonStyle.Secondary, row: 0)
+            .WithButton(TrimButtonLabel(nextLabel), $"{ReviewPrefix}:next:{userId}", ButtonStyle.Primary, row: 0)
+            .WithButton(TrimButtonLabel(escalateLabel), $"{ReviewPrefix}:escalate:{userId}", ButtonStyle.Secondary, row: 0)
             .Build();
     }
+
+    private static string BuildReviewActionLabel(GuildSettings settings, int detectionCount)
+    {
+        if (settings.Punishment.EnableBan &&
+            settings.Punishment.BanAfterDetections > 0 &&
+            detectionCount >= settings.Punishment.BanAfterDetections)
+        {
+            return settings.Punishment.EnablePermanentBan
+                ? "ban"
+                : $"temp ban {FormatDuration(GetTempBanDuration(settings, detectionCount))}";
+        }
+
+        if (!settings.Punishment.EnableTimeout)
+        {
+            return "log only";
+        }
+
+        return $"mute {FormatDuration(GetTimeoutDuration(settings, detectionCount))}";
+    }
+
+    private static string TrimButtonLabel(string label) => label.Length <= 80 ? label : label[..80];
 
     private static bool ShouldAutoBanMultiChannelDuplicate(GuildSettings settings, SpamDetectionResult detection)
     {
