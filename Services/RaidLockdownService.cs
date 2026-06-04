@@ -67,7 +67,7 @@ public sealed class RaidLockdownService(
                     continue;
                 }
 
-                if (settings.RaidLockdown.EnableSlowmode)
+                if (settings.RaidLockdown.EnableSlowmode && SupportsSlowmode(channel))
                 {
                     await channel.ModifyAsync(properties =>
                     {
@@ -235,10 +235,17 @@ public sealed class RaidLockdownService(
                 continue;
             }
 
+            var canApplySlowmode = settings.RaidLockdown.EnableSlowmode && SupportsSlowmode(channel);
+            var canLockChannel = settings.RaidLockdown.EnableTemporaryChannelLock;
+            if (!canApplySlowmode && !canLockChannel)
+            {
+                continue;
+            }
+
             var overwrite = channel.GetPermissionOverwrite(guild.EveryoneRole);
             state.Channels[channel.Id] = new LockdownChannelState
             {
-                PreviousSlowmodeSeconds = settings.RaidLockdown.EnableSlowmode ? channel.SlowModeInterval : null,
+                PreviousSlowmodeSeconds = canApplySlowmode ? channel.SlowModeInterval : null,
                 HadEveryoneOverwrite = overwrite is not null,
                 EveryoneAllowValue = overwrite?.AllowValue ?? 0,
                 EveryoneDenyValue = overwrite?.DenyValue ?? 0
@@ -247,6 +254,8 @@ public sealed class RaidLockdownService(
 
         return state;
     }
+
+    private static bool SupportsSlowmode(SocketTextChannel channel) => channel is not SocketNewsChannel;
 
     private sealed class LockdownState(DateTimeOffset startedAt, DateTimeOffset until, bool lockedChannels)
     {
