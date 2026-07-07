@@ -39,4 +39,4 @@
 
 За замовчуванням команди бачать тільки Discord administrators. Поставте `Access:CommandVisibility` у `VisibleWithRuntimeChecks`, якщо manager roles без Administrator permission повинні бачити commands.
 
-До завершення setup у цій гілці `/setup` можуть запускати server owner і Discord administrators. Після setup ботом можуть керувати server owner, Discord administrators коли це дозволено, і налаштовані manager roles.
+До завершення setup у `main` запускати `/setup` може тільки server owner. Після setup ботом можуть керувати server owner, Discord administrators коли це дозволено, і налаштовані manager roles.

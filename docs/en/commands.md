@@ -39,4 +39,4 @@ All commands are Discord slash commands. Most configuration commands respond eph
 
 Commands are Discord administrator-only by default. Set `Access:CommandVisibility` to `VisibleWithRuntimeChecks` if manager roles without Administrator permission must see commands.
 
-Before setup is completed, this branch allows the server owner and Discord administrators to run setup. After setup, the server owner, Discord administrators when enabled, and configured manager roles can manage the bot.
+Before setup is completed on `main`, only the server owner can run setup. After setup, the server owner, Discord administrators when enabled, and configured manager roles can manage the bot.

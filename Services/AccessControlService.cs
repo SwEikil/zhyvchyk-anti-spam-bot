@@ -18,15 +18,14 @@ public sealed class AccessControlService : IAccessControlService
             return true;
         }
 
-        if (user.GuildPermissions.Administrator &&
-            (!settings.SetupCompleted || settings.Access.AllowDiscordAdministratorsAfterSetup))
-        {
-            return true;
-        }
-
         if (settings.Access.OwnerOnlyBootstrap && !settings.SetupCompleted)
         {
             return false;
+        }
+
+        if (settings.Access.AllowDiscordAdministratorsAfterSetup && user.GuildPermissions.Administrator)
+        {
+            return true;
         }
 
         return user.Roles.Any(role => settings.Access.ManagerRoleIds.Contains(role.Id));
