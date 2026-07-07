@@ -1,4 +1,0 @@
-<Solution>
-  <Project Path="AntiSpamBot.csproj" />
-  <Project Path="AntiSpamBot.Tests/AntiSpamBot.Tests.csproj" />
-</Solution>

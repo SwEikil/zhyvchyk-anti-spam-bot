@@ -65,6 +65,9 @@ public sealed class ModerationService(
                 user = user.Username,
                 detection.TriggerType,
                 detection.Reason,
+                detection.StrictMonitoringApplied,
+                detection.UserRiskScore,
+                detection.UserRiskDetails,
                 messageIds = detection.Messages.Select(item => item.MessageId).ToArray(),
                 channels = detection.AffectedChannelIds
             }, cancellationToken);
@@ -118,6 +121,9 @@ public sealed class ModerationService(
                     user = user.Username,
                     detection.TriggerType,
                     detection.Reason,
+                    detection.StrictMonitoringApplied,
+                    detection.UserRiskScore,
+                    detection.UserRiskDetails,
                     deletedCount,
                     punishment = autoBanPunishment,
                     escalation = "auto_ban_multi_channel_duplicate",
@@ -128,7 +134,8 @@ public sealed class ModerationService(
                 return;
             }
 
-            var punishment = await ApplyPunishmentAsync(guild, user, settings, strike, reason, cancellationToken);
+            var forceStrictTimeout = ShouldApplyStrictMonitoringTimeout(settings, detection);
+            var punishment = await ApplyPunishmentAsync(guild, user, settings, strike, reason, forceStrictTimeout, cancellationToken);
 
             await strikeStore.SetLastPunishmentAsync(guild.Id, user.Id, DateTimeOffset.UtcNow, cancellationToken);
             await localLogs.WriteAsync(guild.Id, settings, "moderation_action", new
@@ -137,6 +144,9 @@ public sealed class ModerationService(
                 user = user.Username,
                 detection.TriggerType,
                 detection.Reason,
+                detection.StrictMonitoringApplied,
+                detection.UserRiskScore,
+                detection.UserRiskDetails,
                 deletedCount,
                 punishment,
                 channels = detection.AffectedChannelIds
@@ -272,6 +282,7 @@ public sealed class ModerationService(
         GuildSettings settings,
         UserStrikeState strike,
         string reason,
+        bool forceTimeout,
         CancellationToken cancellationToken)
     {
         if (settings.Punishment.EnableBan &&
@@ -287,7 +298,7 @@ public sealed class ModerationService(
             return await TempBanUserAsync(guild, user.Id, user, settings, tempBanDuration, reason, cancellationToken);
         }
 
-        if (!settings.Punishment.EnableTimeout)
+        if (!settings.Punishment.EnableTimeout && !forceTimeout)
         {
             return localizer.Get(settings, "punishment_none");
         }
@@ -529,8 +540,29 @@ public sealed class ModerationService(
         var values = detection.ReasonValues is { Count: > 0 }
             ? detection.ReasonValues
             : new Dictionary<string, string> { ["reason"] = detection.Reason };
-        return localizer.Format(settings, detection.ReasonKey, values);
+        var localizedReason = localizer.Format(settings, detection.ReasonKey, values);
+        if (!detection.StrictMonitoringApplied)
+        {
+            return localizedReason;
+        }
+
+        localizedReason = localizer.Format(settings, "reason_strict_monitoring", new Dictionary<string, string>
+        {
+            ["reason"] = localizedReason,
+            ["score"] = detection.UserRiskScore.ToString(),
+            ["details"] = string.IsNullOrWhiteSpace(detection.UserRiskDetails) ? localizer.Get(settings, "unknown") : detection.UserRiskDetails
+        });
+
+        return settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam
+            ? localizer.Format(settings, "reason_strict_timeout", new Dictionary<string, string> { ["reason"] = localizedReason })
+            : localizedReason;
     }
+
+    public static bool ShouldApplyStrictMonitoringTimeout(GuildSettings settings, SpamDetectionResult detection) =>
+        detection.StrictMonitoringApplied &&
+        settings.UserRisk.StrictMonitoringEnabled &&
+        settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam &&
+        !settings.DryRun.Enabled;
 
     private static string BuildReason(GuildSettings settings, string localizedReason, SpamDetectionResult detection) =>
         settings.Punishment.ReasonTemplate

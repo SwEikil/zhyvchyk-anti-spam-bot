@@ -120,10 +120,16 @@ public sealed class UserRiskSettings
     public bool Enabled { get; set; } = true;
     public int NewAccountAgeHours { get; set; } = 24;
     public int RecentJoinMinutes { get; set; } = 10;
+    public int NewAccountAgeDays { get; set; } = 60;
+    public int RecentJoinDays { get; set; } = 60;
     public int PunishAtScore { get; set; } = 70;
     public int NewAccountScore { get; set; } = 35;
     public int RecentJoinScore { get; set; } = 30;
     public int FirstMessageLinkScore { get; set; } = 25;
+    public bool StrictMonitoringEnabled { get; set; } = true;
+    public int StrictMonitoringScoreBonus { get; set; } = 4;
+    public bool StrictMonitoringTimeoutOnConfirmedSpam { get; set; } = true;
+    public int StrictMonitoringMinimumSpamCount { get; set; } = 2;
 }
 
 public sealed class AttachmentSecuritySettings

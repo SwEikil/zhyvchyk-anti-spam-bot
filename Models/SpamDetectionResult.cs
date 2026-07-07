@@ -10,6 +10,9 @@ public sealed class SpamDetectionResult
     public double SimilarityScore { get; init; }
     public IReadOnlyList<TrackedMessage> Messages { get; init; } = [];
     public IReadOnlyList<ulong> AffectedChannelIds { get; init; } = [];
+    public bool StrictMonitoringApplied { get; init; }
+    public int UserRiskScore { get; init; }
+    public string UserRiskDetails { get; init; } = "";
 
     public static SpamDetectionResult Clean { get; } = new();
 }

@@ -85,12 +85,18 @@
 ## User Risk
 
 - `UserRisk.Enabled`: головний перемикач account-risk scoring.
-- `UserRisk.NewAccountAgeHours`: акаунти молодші за цей вік отримують risk points.
-- `UserRisk.RecentJoinMinutes`: учасники, які зайшли протягом цього вікна, отримують risk points.
+- `UserRisk.NewAccountAgeDays`: акаунти молодші за цей вік отримують risk points і strict monitoring. За замовчуванням `60`. Налаштовується в User Risk panel і JSON.
+- `UserRisk.RecentJoinDays`: учасники, які зайшли протягом цього вікна, отримують risk points і strict monitoring. За замовчуванням `60`. Налаштовується в User Risk panel і JSON.
+- `UserRisk.NewAccountAgeHours`: legacy account-age window для старих JSON configs.
+- `UserRisk.RecentJoinMinutes`: legacy recent-join window для старих JSON configs.
 - `UserRisk.PunishAtScore`: score, після якого user-risk context може підштовхнути подію до punishment.
-- `UserRisk.NewAccountScore`: points за новий акаунт.
-- `UserRisk.RecentJoinScore`: points за recent join.
-- `UserRisk.FirstMessageLinkScore`: points, якщо перше побачене повідомлення користувача містить link.
+- `UserRisk.NewAccountScore`: points за новий акаунт. Advanced JSON setting.
+- `UserRisk.RecentJoinScore`: points за recent join. Advanced JSON setting.
+- `UserRisk.FirstMessageLinkScore`: points, якщо перше побачене повідомлення користувача містить link. Advanced JSON setting.
+- `UserRisk.StrictMonitoringEnabled`: знижує spam thresholds для fresh акаунтів або recent joins. Перемикається в User Risk panel і JSON.
+- `UserRisk.StrictMonitoringScoreBonus`: додаткові points, коли користувач одночасно fresh account і recent join. Advanced JSON setting.
+- `UserRisk.StrictMonitoringTimeoutOnConfirmedSpam`: застосовує timeout, коли підтверджений spam іде від strict-monitoring користувача, але dry-run все одно не виконує реальну дію. Перемикається в User Risk panel і JSON.
+- `UserRisk.StrictMonitoringMinimumSpamCount`: мінімальна кількість repeated/similar messages для strict-monitoring користувачів. Налаштовується в User Risk panel і JSON.
 
 ## Attachments
 

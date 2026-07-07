@@ -53,6 +53,7 @@ builder.Services.AddSingleton<IAntiNukeService, AntiNukeService>();
 builder.Services.AddSingleton<ILocalModerationLogService, LocalModerationLogService>();
 builder.Services.AddSingleton<IConfigBackupService, ConfigBackupService>();
 builder.Services.AddSingleton<IConfigPresetService, ConfigPresetService>();
+builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IAntiSpamService, AntiSpamService>();
 builder.Services.AddSingleton<IModerationService, ModerationService>();
 builder.Services.AddSingleton<IAccessControlService, AccessControlService>();
