@@ -33,17 +33,32 @@ public sealed class AccessControlService : IAccessControlService
 
     public bool IsExemptFromModeration(SocketGuildUser user, GuildSettings settings)
     {
-        if (settings.FalsePositiveProtection.WhitelistedUserIds.Contains(user.Id) ||
-            settings.FalsePositiveProtection.IgnoredUserIds.Contains(user.Id))
+        return IsExemptFromModeration(
+            user.Id,
+            user.GuildPermissions.Administrator,
+            user.Roles.Select(role => role.Id),
+            settings);
+    }
+
+    public static bool IsExemptFromModeration(
+        ulong userId,
+        bool isAdministrator,
+        IEnumerable<ulong> roleIds,
+        GuildSettings settings)
+    {
+        if (settings.FalsePositiveProtection.WhitelistedUserIds.Contains(userId) ||
+            settings.FalsePositiveProtection.IgnoredUserIds.Contains(userId))
         {
             return true;
         }
 
-        if (settings.FalsePositiveProtection.IgnoreAdministrators && user.GuildPermissions.Administrator)
+        if (settings.FalsePositiveProtection.IgnoreAdministrators && isAdministrator)
         {
             return true;
         }
 
-        return user.Roles.Any(role => settings.FalsePositiveProtection.IgnoredRoleIds.Contains(role.Id));
+        return roleIds.Any(roleId =>
+            settings.FalsePositiveProtection.IgnoredRoleIds.Contains(roleId) ||
+            settings.Access.ManagerRoleIds.Contains(roleId));
     }
 }

@@ -85,12 +85,18 @@ Most server settings can be changed from `/antispam`. Advanced values are stored
 ## User Risk
 
 - `UserRisk.Enabled`: master switch for account-risk scoring.
-- `UserRisk.NewAccountAgeHours`: accounts younger than this receive risk points.
-- `UserRisk.RecentJoinMinutes`: members who joined within this window receive risk points.
+- `UserRisk.NewAccountAgeDays`: accounts younger than this receive risk points and strict monitoring. Default is `60`. Configurable from the User Risk panel and JSON.
+- `UserRisk.RecentJoinDays`: members who joined within this window receive risk points and strict monitoring. Default is `60`. Configurable from the User Risk panel and JSON.
+- `UserRisk.NewAccountAgeHours`: legacy account-age window kept for older JSON configs.
+- `UserRisk.RecentJoinMinutes`: legacy recent-join window kept for older JSON configs.
 - `UserRisk.PunishAtScore`: score at which user-risk context can push an event into punishment.
-- `UserRisk.NewAccountScore`: points added for a new account.
-- `UserRisk.RecentJoinScore`: points added for a recent join.
-- `UserRisk.FirstMessageLinkScore`: points added when a user's first observed message contains a link.
+- `UserRisk.NewAccountScore`: points added for a new account. Advanced JSON setting.
+- `UserRisk.RecentJoinScore`: points added for a recent join. Advanced JSON setting.
+- `UserRisk.FirstMessageLinkScore`: points added when a user's first observed message contains a link. Advanced JSON setting.
+- `UserRisk.StrictMonitoringEnabled`: lowers spam thresholds for fresh accounts or recent joins. Toggleable from the User Risk panel and JSON.
+- `UserRisk.StrictMonitoringScoreBonus`: extra points when a user is both a fresh account and a recent join. Advanced JSON setting.
+- `UserRisk.StrictMonitoringTimeoutOnConfirmedSpam`: applies timeout when confirmed spam comes from a strict-monitoring user, while still respecting dry-run. Toggleable from the User Risk panel and JSON.
+- `UserRisk.StrictMonitoringMinimumSpamCount`: minimum repeated/similar message count used for strict-monitoring users. Configurable from the User Risk panel and JSON.
 
 ## Attachments
 

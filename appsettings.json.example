@@ -71,7 +71,16 @@
         "Enabled": true,
         "NewAccountAgeHours": 24,
         "RecentJoinMinutes": 10,
-        "PunishAtScore": 70
+        "NewAccountAgeDays": 60,
+        "RecentJoinDays": 60,
+        "PunishAtScore": 70,
+        "NewAccountScore": 35,
+        "RecentJoinScore": 30,
+        "FirstMessageLinkScore": 25,
+        "StrictMonitoringEnabled": true,
+        "StrictMonitoringScoreBonus": 4,
+        "StrictMonitoringTimeoutOnConfirmedSpam": true,
+        "StrictMonitoringMinimumSpamCount": 2
       },
       "Attachments": {
         "SuspiciousExtensionFilteringEnabled": true,

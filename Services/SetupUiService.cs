@@ -99,6 +99,7 @@ public sealed partial class SetupUiService(
             $"{localizer.Get(settings, "status_time_window")}: `{settings.Detection.TimeWindowSeconds}s`\n" +
             $"{localizer.Get(settings, "status_similarity")}: `{settings.Detection.SimilarityThreshold:0.00}`\n" +
             $"{localizer.Get(settings, "status_minimum_count")}: `{settings.Detection.MinimumSpamCount}`\n" +
+            $"{BuildRiskStatus(settings)}\n" +
             $"{localizer.Get(settings, "status_timeouts")}: `{FormatTimeoutDurations(settings)}`\n" +
             $"{localizer.Get(settings, "status_auto_ban")}: `{settings.Punishment.EnableBan}`";
 
@@ -191,6 +192,12 @@ public sealed partial class SetupUiService(
                 break;
             case $"{Prefix}:toggle:user_risk":
                 await ToggleUserRiskAsync(component, user.Guild.Id);
+                break;
+            case $"{Prefix}:toggle:strict_monitoring":
+                await ToggleStrictMonitoringAsync(component, user.Guild.Id);
+                break;
+            case $"{Prefix}:toggle:strict_timeout":
+                await ToggleStrictMonitoringTimeoutAsync(component, user.Guild.Id);
                 break;
             case $"{Prefix}:lockdown_release_level":
                 await UpdateLockdownReleaseLevelAsync(component, user.Guild.Id);
@@ -579,19 +586,24 @@ public sealed partial class SetupUiService(
         await settingsStore.UpdateAsync(guildId, settings =>
         {
             settings.SetupCompleted = true;
-            if (int.TryParse(values.GetValueOrDefault("new_account_hours"), out var newAccountHours))
+            if (int.TryParse(values.GetValueOrDefault("new_account_days"), out var newAccountDays))
             {
-                settings.UserRisk.NewAccountAgeHours = Math.Clamp(newAccountHours, 0, 720);
+                settings.UserRisk.NewAccountAgeDays = Math.Clamp(newAccountDays, 0, 3650);
             }
 
-            if (int.TryParse(values.GetValueOrDefault("recent_join_minutes"), out var recentJoinMinutes))
+            if (int.TryParse(values.GetValueOrDefault("recent_join_days"), out var recentJoinDays))
             {
-                settings.UserRisk.RecentJoinMinutes = Math.Clamp(recentJoinMinutes, 0, 10080);
+                settings.UserRisk.RecentJoinDays = Math.Clamp(recentJoinDays, 0, 3650);
             }
 
             if (int.TryParse(values.GetValueOrDefault("punish_score"), out var punishScore))
             {
                 settings.UserRisk.PunishAtScore = Math.Clamp(punishScore, 1, 500);
+            }
+
+            if (int.TryParse(values.GetValueOrDefault("strict_minimum_count"), out var strictMinimumCount))
+            {
+                settings.UserRisk.StrictMonitoringMinimumSpamCount = Math.Clamp(strictMinimumCount, 2, 20);
             }
         });
 
@@ -755,6 +767,28 @@ public sealed partial class SetupUiService(
         await ReplySavedAsync(component);
     }
 
+    private async Task ToggleStrictMonitoringAsync(SocketMessageComponent component, ulong guildId)
+    {
+        await settingsStore.UpdateAsync(guildId, settings =>
+        {
+            settings.SetupCompleted = true;
+            settings.UserRisk.StrictMonitoringEnabled = !settings.UserRisk.StrictMonitoringEnabled;
+        });
+
+        await ReplySavedAsync(component);
+    }
+
+    private async Task ToggleStrictMonitoringTimeoutAsync(SocketMessageComponent component, ulong guildId)
+    {
+        await settingsStore.UpdateAsync(guildId, settings =>
+        {
+            settings.SetupCompleted = true;
+            settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam = !settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam;
+        });
+
+        await ReplySavedAsync(component);
+    }
+
     private async Task UpdateLockdownReleaseLevelAsync(SocketMessageComponent component, ulong guildId)
     {
         var level = ParseThreatLevel(component.Data.Values.FirstOrDefault(), ThreatLevel.Suspicious);
@@ -811,6 +845,7 @@ public sealed partial class SetupUiService(
             .AddField(localizer.Get(settings, "configure_punishment"), $"{localizer.Get(settings, "status_timeouts")} `{FormatTimeoutDurations(settings)}`, {localizer.Get(settings, "ban")} `{settings.Punishment.EnableBan}`", true)
             .AddField(localizer.Get(settings, "configure_lockdown"), $"`{settings.RaidLockdown.Enabled}` / `{settings.RaidLockdown.SlowmodeSeconds}s`", true)
             .AddField(localizer.Get(settings, "configure_scam_links"), $"`{settings.ScamLinks.Enabled}` / `{settings.ScamLinks.FuzzyDomainThreshold:0.00}`", true)
+            .AddField(localizer.Get(settings, "configure_user_risk"), $"{localizer.Get(settings, "status_strict_monitoring")}: `{settings.UserRisk.StrictMonitoringEnabled}`, {localizer.Get(settings, "status_strict_minimum_count")}: `{settings.UserRisk.StrictMonitoringMinimumSpamCount}`", true)
             .AddField("Dry-run", $"`{settings.DryRun.Enabled}`", true)
             .Build();
 
@@ -880,6 +915,8 @@ public sealed partial class SetupUiService(
         "risk" => new ComponentBuilder()
             .WithButton(localizer.Get(settings, "risk_button"), $"{Prefix}:open_risk_modal", ButtonStyle.Primary, row: 0)
             .WithButton(localizer.Get(settings, "user_risk_toggle_button"), $"{Prefix}:toggle:user_risk", settings.UserRisk.Enabled ? ButtonStyle.Success : ButtonStyle.Secondary, row: 0)
+            .WithButton(localizer.Get(settings, "strict_monitoring_toggle_button"), $"{Prefix}:toggle:strict_monitoring", settings.UserRisk.StrictMonitoringEnabled ? ButtonStyle.Success : ButtonStyle.Secondary, row: 1)
+            .WithButton(localizer.Get(settings, "strict_timeout_toggle_button"), $"{Prefix}:toggle:strict_timeout", settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam ? ButtonStyle.Success : ButtonStyle.Secondary, row: 1)
             .Build(),
         "logs" => BuildAdminPanelComponents(settings),
         _ => BuildMainPanelComponents(settings)
@@ -895,7 +932,7 @@ public sealed partial class SetupUiService(
             "punishment" => $"{localizer.Get(settings, "section_desc_punishment")}\n\n{localizer.Get(settings, "status_timeouts")}: `{FormatTimeoutDurations(settings)}`\n{localizer.Get(settings, "tempban")}: `{settings.Punishment.EnableBan}`\n{localizer.Get(settings, "tempban_steps")}: `{FormatDurationList(settings.Punishment.TempBanDurationsSeconds)}`",
             "lockdown" => $"{localizer.Get(settings, "section_desc_lockdown")}\n\n{localizer.Get(settings, "status_enabled")}: `{settings.RaidLockdown.Enabled}`\n{localizer.Get(settings, "lockdown_trigger_level")}: `{settings.RaidLockdown.MinimumThreatLevel}`\n{localizer.Get(settings, "lockdown_release_level")}: `{settings.RaidLockdown.ReleaseWhenAtOrBelow}`\nSlowmode: `{settings.RaidLockdown.SlowmodeSeconds}s`\nHold: `{settings.RaidLockdown.MinimumHoldSeconds}s`, max `{settings.RaidLockdown.DurationSeconds}s`",
             "links" => $"{localizer.Get(settings, "section_desc_links")}\n\n{localizer.Get(settings, "status_enabled")}: `{settings.ScamLinks.Enabled}`\nConfusables: `{settings.ScamLinks.ConfusableDetectionEnabled}`\nLeetspeak: `{settings.ScamLinks.LeetspeakDetectionEnabled}`\nProtected: `{string.Join(", ", settings.ScamLinks.ProtectedDomains)}`\nBlacklist: `{string.Join(", ", settings.ScamLinks.BlacklistedDomains)}`",
-            "risk" => $"{localizer.Get(settings, "section_desc_risk")}\n\n{localizer.Get(settings, "status_enabled")}: `{settings.UserRisk.Enabled}`\nScore: `{settings.UserRisk.PunishAtScore}`",
+            "risk" => $"{localizer.Get(settings, "section_desc_risk")}\n\n{BuildRiskStatus(settings)}",
             "logs" => $"{localizer.Get(settings, "section_desc_logs")}\n\n{localizer.Get(settings, "status_log_channel")}: `{FormatChannel(settings.Channels.LogChannelId, settings)}`\n{localizer.Get(settings, "status_notification_channel")}: `{FormatChannel(settings.Channels.NotificationChannelId, settings)}`\n{localizer.Get(settings, "status_admin_ping_role")}: `{FormatRole(settings.Notifications.AdminPingRoleId, settings)}`",
             _ => localizer.Get(settings, "main_panel_description")
         };
@@ -906,6 +943,15 @@ public sealed partial class SetupUiService(
             .WithColor(Color.Blue)
             .Build();
     }
+
+    private string BuildRiskStatus(GuildSettings settings) =>
+        $"{localizer.Get(settings, "status_user_risk")}: `{settings.UserRisk.Enabled}`\n" +
+        $"{localizer.Get(settings, "status_strict_monitoring")}: `{settings.UserRisk.StrictMonitoringEnabled}`\n" +
+        $"{localizer.Get(settings, "status_strict_timeout")}: `{settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam}`\n" +
+        $"{localizer.Get(settings, "status_new_account_days")}: `{settings.UserRisk.NewAccountAgeDays}`\n" +
+        $"{localizer.Get(settings, "status_recent_join_days")}: `{settings.UserRisk.RecentJoinDays}`\n" +
+        $"{localizer.Get(settings, "status_strict_minimum_count")}: `{settings.UserRisk.StrictMonitoringMinimumSpamCount}`\n" +
+        $"Score: `{settings.UserRisk.PunishAtScore}`";
 
     private List<SelectMenuOptionBuilder> BuildSectionOptions(GuildSettings settings) =>
     [
@@ -1000,9 +1046,10 @@ public sealed partial class SetupUiService(
 
     private Modal BuildRiskModal(GuildSettings settings) =>
         new ModalBuilder(localizer.Get(settings, "modal_risk_title"), $"{Prefix}:modal:risk")
-            .AddTextInput(localizer.Get(settings, "modal_new_account_hours"), "new_account_hours", value: settings.UserRisk.NewAccountAgeHours.ToString(), minLength: 1, maxLength: 4, required: true)
-            .AddTextInput(localizer.Get(settings, "modal_recent_join_minutes"), "recent_join_minutes", value: settings.UserRisk.RecentJoinMinutes.ToString(), minLength: 1, maxLength: 5, required: true)
+            .AddTextInput(localizer.Get(settings, "modal_new_account_days"), "new_account_days", value: settings.UserRisk.NewAccountAgeDays.ToString(), minLength: 1, maxLength: 4, required: true)
+            .AddTextInput(localizer.Get(settings, "modal_recent_join_days"), "recent_join_days", value: settings.UserRisk.RecentJoinDays.ToString(), minLength: 1, maxLength: 4, required: true)
             .AddTextInput(localizer.Get(settings, "modal_punish_score"), "punish_score", value: settings.UserRisk.PunishAtScore.ToString(), minLength: 1, maxLength: 3, required: true)
+            .AddTextInput(localizer.Get(settings, "modal_strict_minimum_count"), "strict_minimum_count", value: settings.UserRisk.StrictMonitoringMinimumSpamCount.ToString(), minLength: 1, maxLength: 2, required: true)
             .Build();
 
     private Modal BuildPingModal(GuildSettings settings) =>

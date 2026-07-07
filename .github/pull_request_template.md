@@ -4,7 +4,7 @@
 
 ## Testing
 
-- [ ] `dotnet build AntiSpamBot.slnx --configuration Release`
+- [ ] `dotnet build AntiSpamBot.sln --configuration Release`
 - [ ] Manual Discord test, if relevant
 
 ## Safety Checklist

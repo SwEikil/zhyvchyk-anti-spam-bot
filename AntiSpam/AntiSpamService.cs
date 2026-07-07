@@ -18,7 +18,8 @@ public sealed class AntiSpamService(
     IMessageSimilarity similarity,
     IScamLinkDetector scamLinkDetector,
     IUserRiskService userRiskService,
-    IThreatService threatService) : IAntiSpamService
+    IThreatService threatService,
+    IClock clock) : IAntiSpamService
 {
     private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<ulong, UserMessageWindow>> _guildWindows = new();
 
@@ -37,7 +38,7 @@ public sealed class AntiSpamService(
         // which keeps memory bounded and avoids comparing unrelated users on large servers.
         lock (userWindow.SyncRoot)
         {
-            var cutoff = DateTimeOffset.UtcNow.AddSeconds(-settings.Detection.TimeWindowSeconds);
+            var cutoff = clock.UtcNow.AddSeconds(-settings.Detection.TimeWindowSeconds);
             userWindow.Messages.RemoveAll(item => item.Timestamp < cutoff);
             userWindow.Messages.Add(tracked);
 
@@ -52,7 +53,7 @@ public sealed class AntiSpamService(
 
     public void Cleanup(TimeSpan maxAge)
     {
-        var cutoff = DateTimeOffset.UtcNow.Subtract(maxAge);
+        var cutoff = clock.UtcNow.Subtract(maxAge);
 
         foreach (var guild in _guildWindows)
         {
@@ -80,15 +81,13 @@ public sealed class AntiSpamService(
     {
         var detection = settings.Detection;
         var threatLevel = threatService.GetCurrentLevel(current.GuildId, settings);
-        var minimumSpamCount = threatLevel >= ThreatLevel.UnderAttack
-            ? Math.Max(2, detection.MinimumSpamCount - 1)
-            : detection.MinimumSpamCount;
-        var maxMessagesBeforePunishment = threatLevel >= ThreatLevel.UnderAttack
-            ? Math.Max(2, detection.MaxMessagesBeforePunishment - 1)
-            : detection.MaxMessagesBeforePunishment;
-        var similarityThreshold = threatLevel >= ThreatLevel.UnderAttack
-            ? Math.Max(0.72, detection.SimilarityThreshold - 0.05)
-            : detection.SimilarityThreshold;
+        var userRisk = user is not null
+            ? userRiskService.Evaluate(user, current.Urls.Count > 0, settings.UserRisk)
+            : UserRiskEvaluation.None;
+        var thresholds = CalculateEffectiveThresholds(detection, settings.UserRisk, threatLevel, userRisk);
+        var minimumSpamCount = thresholds.MinimumSpamCount;
+        var maxMessagesBeforePunishment = thresholds.MaxMessagesBeforePunishment;
+        var similarityThreshold = thresholds.SimilarityThreshold;
         var channels = recent.Select(item => item.ChannelId).Distinct().ToArray();
         var hasEnoughChannels = !detection.RequireMultipleChannels || channels.Length > 1;
 
@@ -96,7 +95,7 @@ public sealed class AntiSpamService(
         {
             if (scamLinkDetector.IsSuspicious(domain, settings.ScamLinks, out var reason))
             {
-                return CreateResult(SpamTriggerType.ScamLink, reason, 1.0, recent.Where(item => item.Domains.Contains(domain)));
+                return CreateResult(SpamTriggerType.ScamLink, reason, 1.0, recent.Where(item => item.Domains.Contains(domain)), userRisk: userRisk);
             }
         }
 
@@ -113,21 +112,22 @@ public sealed class AntiSpamService(
                 1.0,
                 [current],
                 "reason_suspicious_attachment",
-                new Dictionary<string, string> { ["extensions"] = string.Join(", ", suspiciousExtensions) });
+                new Dictionary<string, string> { ["extensions"] = string.Join(", ", suspiciousExtensions) },
+                userRisk);
         }
 
         if (user is not null)
         {
-            var riskScore = userRiskService.Score(user, current.Urls.Count > 0, settings.UserRisk, out var riskReason);
-            if (riskScore >= settings.UserRisk.PunishAtScore)
+            if (userRisk.Score >= settings.UserRisk.PunishAtScore)
             {
                 return CreateResult(
                     SpamTriggerType.UserRisk,
-                    $"user risk score {riskScore}: {riskReason}",
+                    $"user risk score {userRisk.Score}: {userRisk.Reason}",
                     1.0,
                     [current],
                     "reason_user_risk",
-                    new Dictionary<string, string> { ["score"] = riskScore.ToString(), ["details"] = riskReason });
+                    new Dictionary<string, string> { ["score"] = userRisk.Score.ToString(), ["details"] = userRisk.Reason },
+                    userRisk);
             }
         }
 
@@ -140,7 +140,8 @@ public sealed class AntiSpamService(
                 "very fast multi-channel posting",
                 1.0,
                 recent,
-                "reason_fast_multichannel");
+                "reason_fast_multichannel",
+                userRisk: userRisk);
         }
 
         var similar = recent
@@ -161,7 +162,8 @@ public sealed class AntiSpamService(
                     : "repeated similar messages",
                 similar.Average(item => item.Score),
                 similar.Select(item => item.Message),
-                hasEnoughChannels ? "reason_similar_multichannel" : "reason_repeated_similar");
+                hasEnoughChannels ? "reason_similar_multichannel" : "reason_repeated_similar",
+                userRisk: userRisk);
         }
 
         var repeatedUrlMessages = recent
@@ -180,7 +182,8 @@ public sealed class AntiSpamService(
                 "repeated suspicious links",
                 1.0,
                 repeatedUrlMessages,
-                "reason_repeated_links");
+                "reason_repeated_links",
+                userRisk: userRisk);
         }
 
         var repeatedAttachments = recent
@@ -199,7 +202,8 @@ public sealed class AntiSpamService(
                 "repeated attachments or images",
                 1.0,
                 repeatedAttachments,
-                "reason_repeated_attachments");
+                "reason_repeated_attachments",
+                userRisk: userRisk);
         }
 
         var massMentions = recent.Where(item => item.MentionsEveryone).ToArray();
@@ -212,7 +216,8 @@ public sealed class AntiSpamService(
                 "mass mentions detected",
                 1.0,
                 massMentions,
-                "reason_mass_mentions");
+                "reason_mass_mentions",
+                userRisk: userRisk);
         }
 
         if (recent.Count >= maxMessagesBeforePunishment)
@@ -222,7 +227,8 @@ public sealed class AntiSpamService(
                 "message burst exceeded configured limit",
                 1.0,
                 recent,
-                "reason_message_burst");
+                "reason_message_burst",
+                userRisk: userRisk);
         }
 
         return SpamDetectionResult.Clean;
@@ -234,8 +240,10 @@ public sealed class AntiSpamService(
         double similarityScore,
         IEnumerable<TrackedMessage> messages,
         string reasonKey = "",
-        IReadOnlyDictionary<string, string>? reasonValues = null)
+        IReadOnlyDictionary<string, string>? reasonValues = null,
+        UserRiskEvaluation? userRisk = null)
     {
+        userRisk ??= UserRiskEvaluation.None;
         var messageList = messages
             .GroupBy(item => item.MessageId)
             .Select(group => group.First())
@@ -251,8 +259,40 @@ public sealed class AntiSpamService(
             ReasonValues = reasonValues ?? new Dictionary<string, string>(),
             SimilarityScore = similarityScore,
             Messages = messageList,
-            AffectedChannelIds = messageList.Select(item => item.ChannelId).Distinct().ToArray()
+            AffectedChannelIds = messageList.Select(item => item.ChannelId).Distinct().ToArray(),
+            StrictMonitoringApplied = userRisk.StrictMonitoringApplies,
+            UserRiskScore = userRisk.Score,
+            UserRiskDetails = userRisk.Reason
         };
+    }
+
+    public static EffectiveDetectionThresholds CalculateEffectiveThresholds(
+        DetectionSettings detection,
+        UserRiskSettings userRisk,
+        ThreatLevel threatLevel,
+        UserRiskEvaluation userRiskEvaluation)
+    {
+        var configuredMinimumSpamCount = Math.Max(2, detection.MinimumSpamCount);
+        var configuredMaxMessagesBeforePunishment = Math.Max(configuredMinimumSpamCount, detection.MaxMessagesBeforePunishment);
+        var minimumSpamCount = threatLevel >= ThreatLevel.UnderAttack
+            ? Math.Max(2, configuredMinimumSpamCount - 1)
+            : configuredMinimumSpamCount;
+        var maxMessagesBeforePunishment = threatLevel >= ThreatLevel.UnderAttack
+            ? Math.Max(2, configuredMaxMessagesBeforePunishment - 1)
+            : configuredMaxMessagesBeforePunishment;
+        var similarityThreshold = threatLevel >= ThreatLevel.UnderAttack
+            ? Math.Max(0.72, detection.SimilarityThreshold - 0.05)
+            : detection.SimilarityThreshold;
+
+        if (userRiskEvaluation.StrictMonitoringApplies && userRisk.StrictMonitoringEnabled)
+        {
+            var strictMinimum = Math.Max(2, userRisk.StrictMonitoringMinimumSpamCount);
+            strictMinimum = Math.Min(strictMinimum, minimumSpamCount);
+            minimumSpamCount = Math.Min(minimumSpamCount, strictMinimum);
+            maxMessagesBeforePunishment = Math.Min(maxMessagesBeforePunishment, Math.Max(minimumSpamCount, strictMinimum + 1));
+        }
+
+        return new EffectiveDetectionThresholds(minimumSpamCount, maxMessagesBeforePunishment, similarityThreshold);
     }
 
     private static string TriggerReasonKey(SpamTriggerType triggerType) => triggerType switch
@@ -274,3 +314,8 @@ public sealed class AntiSpamService(
         public List<TrackedMessage> Messages { get; } = [];
     }
 }
+
+public sealed record EffectiveDetectionThresholds(
+    int MinimumSpamCount,
+    int MaxMessagesBeforePunishment,
+    double SimilarityThreshold);
