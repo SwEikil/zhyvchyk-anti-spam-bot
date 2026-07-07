@@ -5,6 +5,7 @@
     "DataDirectory": "data",
     "DefaultSettings": {
       "Language": "en",
+      "SetupCompleted": false,
       "Access": {
         "OwnerOnlyBootstrap": true,
         "AllowDiscordAdministratorsAfterSetup": true,
@@ -17,6 +18,10 @@
         "IgnoredChannelIds": [],
         "LogChannelId": null,
         "NotificationChannelId": null
+      },
+      "Notifications": {
+        "AdminPingRoleId": null,
+        "AdminPingMessage": "{role} Anti-spam action: {reason}. User: {user} ({userId}). Channels: {channels}. Deleted: {deletedCount}. Punishment: {punishment}."
       },
       "Detection": {
         "Enabled": true,
@@ -47,6 +52,12 @@
         "CooldownSeconds": 60,
         "ReasonTemplate": "Coordinated spam detected: {reason}"
       },
+      "FalsePositiveProtection": {
+        "IgnoreAdministrators": true,
+        "IgnoredRoleIds": [],
+        "IgnoredUserIds": [],
+        "WhitelistedUserIds": []
+      },
       "RaidLockdown": {
         "Enabled": true,
         "EnableSlowmode": true,
@@ -71,12 +82,29 @@
         "Enabled": true,
         "NewAccountAgeHours": 24,
         "RecentJoinMinutes": 10,
-        "PunishAtScore": 70
+        "PunishAtScore": 70,
+        "NewAccountScore": 35,
+        "RecentJoinScore": 30,
+        "FirstMessageLinkScore": 25
       },
       "Attachments": {
         "SuspiciousExtensionFilteringEnabled": true,
         "HashingEnabled": false,
         "SuspiciousExtensions": [".exe", ".scr", ".bat", ".cmd", ".ps1", ".js", ".vbs", ".jar", ".apk", ".msi", ".dll"]
+      },
+      "AdminReview": {
+        "Enabled": true,
+        "IncludeDeletedMessageQuote": true,
+        "IncludeAttachments": true,
+        "ActionButtonsEnabled": true,
+        "MaxReuploadedImages": 3,
+        "MaxAttachmentBytes": 8388608
+      },
+      "Escalation": {
+        "AutoBanMultiChannelDuplicate": true,
+        "MultiChannelWindowSeconds": 60,
+        "MultiChannelMinimumChannels": 3,
+        "SimilarityThreshold": 0.95
       },
       "ThreatLevels": {
         "Enabled": true,
