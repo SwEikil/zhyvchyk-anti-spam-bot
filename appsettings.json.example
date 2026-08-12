@@ -73,7 +73,6 @@
         "RecentJoinMinutes": 10,
         "NewAccountAgeDays": 60,
         "RecentJoinDays": 60,
-        "PunishAtScore": 70,
         "NewAccountScore": 35,
         "RecentJoinScore": 30,
         "FirstMessageLinkScore": 25,

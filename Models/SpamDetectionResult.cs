@@ -14,6 +14,8 @@ public sealed class SpamDetectionResult
     public int UserRiskScore { get; init; }
     public string UserRiskDetails { get; init; } = "";
 
+    public bool HasActionableTrigger => IsSpam && TriggerType is not (SpamTriggerType.None or SpamTriggerType.UserRisk);
+
     public static SpamDetectionResult Clean { get; } = new();
 }
 

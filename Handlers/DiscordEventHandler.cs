@@ -97,7 +97,7 @@ public sealed class DiscordEventHandler(
             }
 
             var detection = antiSpam.Inspect(message, guildChannel.Guild.Id, settings);
-            if (!detection.IsSpam)
+            if (!detection.HasActionableTrigger)
             {
                 return;
             }

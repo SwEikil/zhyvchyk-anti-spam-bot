@@ -122,6 +122,8 @@ public sealed class UserRiskSettings
     public int RecentJoinMinutes { get; set; } = 10;
     public int NewAccountAgeDays { get; set; } = 60;
     public int RecentJoinDays { get; set; } = 60;
+    // Kept only so older JSON configuration continues to deserialize. Risk scores are contextual
+    // and this value is not an actionable punishment threshold.
     public int PunishAtScore { get; set; } = 70;
     public int NewAccountScore { get; set; } = 35;
     public int RecentJoinScore { get; set; } = 30;

@@ -596,11 +596,6 @@ public sealed partial class SetupUiService(
                 settings.UserRisk.RecentJoinDays = Math.Clamp(recentJoinDays, 0, 3650);
             }
 
-            if (int.TryParse(values.GetValueOrDefault("punish_score"), out var punishScore))
-            {
-                settings.UserRisk.PunishAtScore = Math.Clamp(punishScore, 1, 500);
-            }
-
             if (int.TryParse(values.GetValueOrDefault("strict_minimum_count"), out var strictMinimumCount))
             {
                 settings.UserRisk.StrictMonitoringMinimumSpamCount = Math.Clamp(strictMinimumCount, 2, 20);
@@ -950,8 +945,7 @@ public sealed partial class SetupUiService(
         $"{localizer.Get(settings, "status_strict_timeout")}: `{settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam}`\n" +
         $"{localizer.Get(settings, "status_new_account_days")}: `{settings.UserRisk.NewAccountAgeDays}`\n" +
         $"{localizer.Get(settings, "status_recent_join_days")}: `{settings.UserRisk.RecentJoinDays}`\n" +
-        $"{localizer.Get(settings, "status_strict_minimum_count")}: `{settings.UserRisk.StrictMonitoringMinimumSpamCount}`\n" +
-        $"Score: `{settings.UserRisk.PunishAtScore}`";
+        $"{localizer.Get(settings, "status_strict_minimum_count")}: `{settings.UserRisk.StrictMonitoringMinimumSpamCount}`";
 
     private List<SelectMenuOptionBuilder> BuildSectionOptions(GuildSettings settings) =>
     [
@@ -1048,7 +1042,6 @@ public sealed partial class SetupUiService(
         new ModalBuilder(localizer.Get(settings, "modal_risk_title"), $"{Prefix}:modal:risk")
             .AddTextInput(localizer.Get(settings, "modal_new_account_days"), "new_account_days", value: settings.UserRisk.NewAccountAgeDays.ToString(), minLength: 1, maxLength: 4, required: true)
             .AddTextInput(localizer.Get(settings, "modal_recent_join_days"), "recent_join_days", value: settings.UserRisk.RecentJoinDays.ToString(), minLength: 1, maxLength: 4, required: true)
-            .AddTextInput(localizer.Get(settings, "modal_punish_score"), "punish_score", value: settings.UserRisk.PunishAtScore.ToString(), minLength: 1, maxLength: 3, required: true)
             .AddTextInput(localizer.Get(settings, "modal_strict_minimum_count"), "strict_minimum_count", value: settings.UserRisk.StrictMonitoringMinimumSpamCount.ToString(), minLength: 1, maxLength: 2, required: true)
             .Build();
 

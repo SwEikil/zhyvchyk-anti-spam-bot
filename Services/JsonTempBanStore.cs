@@ -11,6 +11,8 @@ public interface ITempBanStore
     Task AddAsync(TempBanRecord record, CancellationToken cancellationToken = default);
     Task UpdateAsync(TempBanRecord record, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TempBanRecord>> GetDueAsync(DateTimeOffset now, TimeSpan pendingGrace, CancellationToken cancellationToken = default);
+    Task<TempBanRecord?> GetAsync(ulong guildId, ulong userId, CancellationToken cancellationToken = default);
+    Task<bool> RemoveIfIncidentAsync(ulong guildId, ulong userId, string incidentId, CancellationToken cancellationToken = default);
     Task RemoveAsync(ulong guildId, ulong userId, CancellationToken cancellationToken = default);
 }
 
@@ -76,6 +78,47 @@ public sealed class JsonTempBanStore(IOptions<BotOptions> options) : ITempBanSto
         }
 
         return due;
+    }
+
+    public async Task<TempBanRecord?> GetAsync(ulong guildId, ulong userId, CancellationToken cancellationToken = default)
+    {
+        var gate = _locks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return (await LoadAsync(guildId, cancellationToken)).FirstOrDefault(item => item.UserId == userId);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<bool> RemoveIfIncidentAsync(
+        ulong guildId,
+        ulong userId,
+        string incidentId,
+        CancellationToken cancellationToken = default)
+    {
+        var gate = _locks.GetOrAdd(guildId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var records = await LoadAsync(guildId, cancellationToken);
+            var removed = records.RemoveAll(item =>
+                item.UserId == userId &&
+                item.IncidentId.Equals(incidentId, StringComparison.Ordinal)) > 0;
+            if (removed)
+            {
+                await SaveAsync(guildId, records, cancellationToken);
+            }
+
+            return removed;
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task RemoveAsync(ulong guildId, ulong userId, CancellationToken cancellationToken = default)

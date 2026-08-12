@@ -12,13 +12,26 @@ public interface IAccessControlService
 public sealed class AccessControlService : IAccessControlService
 {
     public bool CanConfigure(SocketGuildUser user, GuildSettings settings)
+        => CanConfigure(
+            user.Id,
+            user.Guild.OwnerId,
+            user.GuildPermissions.Administrator,
+            user.Roles.Select(role => role.Id),
+            settings);
+
+    public static bool CanConfigure(
+        ulong userId,
+        ulong ownerId,
+        bool isAdministrator,
+        IEnumerable<ulong> roleIds,
+        GuildSettings settings)
     {
-        if (user.Id == user.Guild.OwnerId)
+        if (userId == ownerId)
         {
             return true;
         }
 
-        if (user.GuildPermissions.Administrator &&
+        if (isAdministrator &&
             (!settings.SetupCompleted || settings.Access.AllowDiscordAdministratorsAfterSetup))
         {
             return true;
@@ -29,7 +42,7 @@ public sealed class AccessControlService : IAccessControlService
             return false;
         }
 
-        return user.Roles.Any(role => settings.Access.ManagerRoleIds.Contains(role.Id));
+        return roleIds.Any(settings.Access.ManagerRoleIds.Contains);
     }
 
     public bool IsExemptFromModeration(SocketGuildUser user, GuildSettings settings)
