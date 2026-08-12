@@ -263,9 +263,12 @@ public sealed class ModerationService(
             return true;
         }
 
+        var responsePlan = InteractionResponseFlow.ModerationComponent;
+        await InteractionResponseFlow.ExecuteAsync(component, responsePlan.Acknowledge);
+
         if (parts[1].Equals("falsepositive", StringComparison.Ordinal))
         {
-            await HandleFalsePositiveAsync(component, actor, settings, parts[2], cancellationToken);
+            await HandleFalsePositiveAsync(component, actor, settings, parts[2], responsePlan, cancellationToken);
             return true;
         }
 
@@ -274,14 +277,20 @@ public sealed class ModerationService(
         var targetUserId = incident?.TargetUserId ?? legacyTargetUserId;
         if (incident is null && !hasLegacyTarget)
         {
-            await component.RespondAsync(localizer.Get(settings, "moderation_incident_not_found"), ephemeral: true);
+            await InteractionResponseFlow.ExecuteAsync(
+                component,
+                responsePlan.Complete,
+                localizer.Get(settings, "moderation_incident_not_found"));
             return true;
         }
 
         if (incident is not null &&
             !incident.Status.Equals(ModerationIncidentStatuses.Active, StringComparison.OrdinalIgnoreCase))
         {
-            await component.RespondAsync(localizer.Get(settings, "false_positive_already_handled"), ephemeral: true);
+            await InteractionResponseFlow.ExecuteAsync(
+                component,
+                responsePlan.Complete,
+                localizer.Get(settings, "false_positive_already_handled"));
             return true;
         }
 
@@ -302,7 +311,10 @@ public sealed class ModerationService(
 
         if (string.IsNullOrWhiteSpace(result))
         {
-            await component.RespondAsync(localizer.Get(settings, "moderation_action_failed"), ephemeral: true);
+            await InteractionResponseFlow.ExecuteAsync(
+                component,
+                responsePlan.Complete,
+                localizer.Get(settings, "moderation_action_failed"));
             return true;
         }
 
@@ -316,11 +328,14 @@ public sealed class ModerationService(
         }, cancellationToken);
         await strikeStore.SetLastPunishmentAsync(actor.Guild.Id, targetUserId, DateTimeOffset.UtcNow, cancellationToken);
 
-        await component.RespondAsync(localizer.Format(settings, "moderation_action_applied", new Dictionary<string, string>
-        {
-            ["result"] = SanitizeForReport(result),
-            ["userId"] = targetUserId.ToString()
-        }), ephemeral: true);
+        await InteractionResponseFlow.ExecuteAsync(
+            component,
+            responsePlan.Complete,
+            localizer.Format(settings, "moderation_action_applied", new Dictionary<string, string>
+            {
+                ["result"] = SanitizeForReport(result),
+                ["userId"] = targetUserId.ToString()
+            }));
         return true;
     }
 
@@ -329,6 +344,7 @@ public sealed class ModerationService(
         SocketGuildUser actor,
         GuildSettings settings,
         string incidentId,
+        DeferredInteractionResponsePlan responsePlan,
         CancellationToken cancellationToken)
     {
         var claim = await incidentStore.TryClaimFalsePositiveAsync(
@@ -338,13 +354,19 @@ public sealed class ModerationService(
             cancellationToken);
         if (claim.Result == IncidentClaimResult.NotFound || claim.Incident is null)
         {
-            await component.RespondAsync(localizer.Get(settings, "moderation_incident_not_found"), ephemeral: true);
+            await InteractionResponseFlow.ExecuteAsync(
+                component,
+                responsePlan.Complete,
+                localizer.Get(settings, "moderation_incident_not_found"));
             return;
         }
 
         if (claim.Result == IncidentClaimResult.AlreadyHandled)
         {
-            await component.RespondAsync(localizer.Get(settings, "false_positive_already_handled"), ephemeral: true);
+            await InteractionResponseFlow.ExecuteAsync(
+                component,
+                responsePlan.Complete,
+                localizer.Get(settings, "false_positive_already_handled"));
             return;
         }
 
@@ -406,7 +428,7 @@ public sealed class ModerationService(
             summary = response
         }, cancellationToken);
 
-        await component.RespondAsync(response, ephemeral: true);
+        await InteractionResponseFlow.ExecuteAsync(component, responsePlan.Complete, response);
     }
 
     public Task RemoveTimeoutAsync(SocketGuildUser user, string reason, CancellationToken cancellationToken = default) =>
