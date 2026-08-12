@@ -40,6 +40,7 @@ builder.Services.AddSingleton(_ => new DiscordSocketClient(new DiscordSocketConf
 
 builder.Services.AddSingleton<IGuildSettingsStore, JsonGuildSettingsStore>();
 builder.Services.AddSingleton<IUserStrikeStore, JsonUserStrikeStore>();
+builder.Services.AddSingleton<IModerationIncidentStore, JsonModerationIncidentStore>();
 builder.Services.AddSingleton<ITempBanStore, JsonTempBanStore>();
 builder.Services.AddSingleton<IRaidLockdownStore, JsonRaidLockdownStore>();
 builder.Services.AddSingleton<ITextLocalizer, TextLocalizer>();

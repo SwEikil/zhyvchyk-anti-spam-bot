@@ -55,6 +55,7 @@ public sealed class StrictMonitoringTests
         var detection = new SpamDetectionResult
         {
             IsSpam = true,
+            TriggerType = SpamTriggerType.SimilarMultiChannelMessages,
             StrictMonitoringApplied = true,
             UserRiskScore = 69,
             UserRiskDetails = "fresh account, recent join"
@@ -73,6 +74,7 @@ public sealed class StrictMonitoringTests
         var detection = new SpamDetectionResult
         {
             IsSpam = true,
+            TriggerType = SpamTriggerType.SimilarMultiChannelMessages,
             StrictMonitoringApplied = true,
             UserRiskScore = 69,
             UserRiskDetails = "fresh account, recent join"

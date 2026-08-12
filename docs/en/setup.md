@@ -62,6 +62,6 @@ In Discord, run:
 /setup
 ```
 
-The server owner has access before setup is completed. After setup, administrators and configured manager roles can manage the bot depending on command visibility settings.
+The server owner or a Discord administrator has access before setup is completed on this branch. After setup, administrators and configured manager roles can manage the bot depending on command visibility settings.
 
 After setup, run `/status` to verify the active defaults, then use `/antispam` for the control panel. See [Configuration](configuration.md) for a detailed explanation of every setting and [Commands](commands.md) for the full slash-command list.

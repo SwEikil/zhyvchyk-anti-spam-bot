@@ -15,5 +15,7 @@
 
   <ItemGroup>
     <Compile Remove="AntiSpamBot.Tests/**/*.cs" />
+    <Content Remove="AntiSpamBot.Tests/**" />
+    <None Remove="AntiSpamBot.Tests/**" />
   </ItemGroup>
 </Project>

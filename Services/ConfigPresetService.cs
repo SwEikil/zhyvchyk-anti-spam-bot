@@ -35,7 +35,6 @@ public sealed class ConfigPresetService : IConfigPresetService
                 settings.Detection.MinimumSpamCount = 2;
                 settings.Detection.MaxMessagesBeforePunishment = 4;
                 settings.Detection.SimilarityThreshold = 0.80;
-                settings.UserRisk.PunishAtScore = 60;
                 settings.Punishment.TimeoutDurationsSeconds = [3600, 21600, 86400];
                 settings.RaidLockdown.SlowmodeSeconds = 20;
                 return true;
@@ -43,7 +42,6 @@ public sealed class ConfigPresetService : IConfigPresetService
                 settings.Detection.MinimumSpamCount = 2;
                 settings.Detection.MaxMessagesBeforePunishment = 3;
                 settings.Detection.SimilarityThreshold = 0.76;
-                settings.UserRisk.PunishAtScore = 50;
                 settings.Punishment.TimeoutDurationsSeconds = [7200, 86400, 604800];
                 settings.RaidLockdown.SlowmodeSeconds = 30;
                 settings.RaidLockdown.EnableTemporaryChannelLock = true;

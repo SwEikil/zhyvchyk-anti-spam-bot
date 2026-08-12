@@ -89,11 +89,11 @@
 - `UserRisk.RecentJoinDays`: учасники, які зайшли протягом цього вікна, отримують risk points і strict monitoring. За замовчуванням `60`. Налаштовується в User Risk panel і JSON.
 - `UserRisk.NewAccountAgeHours`: legacy account-age window для старих JSON configs.
 - `UserRisk.RecentJoinMinutes`: legacy recent-join window для старих JSON configs.
-- `UserRisk.PunishAtScore`: score, після якого user-risk context може підштовхнути подію до punishment.
+- `UserRisk.PunishAtScore`: legacy-поле сумісності. User risk є лише контекстом і ніколи самостійно не спричиняє покарання.
 - `UserRisk.NewAccountScore`: points за новий акаунт. Advanced JSON setting.
 - `UserRisk.RecentJoinScore`: points за recent join. Advanced JSON setting.
 - `UserRisk.FirstMessageLinkScore`: points, якщо перше побачене повідомлення користувача містить link. Advanced JSON setting.
-- `UserRisk.StrictMonitoringEnabled`: знижує spam thresholds для fresh акаунтів або recent joins. Перемикається в User Risk panel і JSON.
+- `UserRisk.StrictMonitoringEnabled`: знижує пороги повторюваних spam-патернів для fresh акаунтів або recent joins. Вік акаунта чи час входу не стають spam-тригером, а одне звичайне повідомлення завжди проходить. Перемикається в User Risk panel і JSON.
 - `UserRisk.StrictMonitoringScoreBonus`: додаткові points, коли користувач одночасно fresh account і recent join. Advanced JSON setting.
 - `UserRisk.StrictMonitoringTimeoutOnConfirmedSpam`: застосовує timeout, коли підтверджений spam іде від strict-monitoring користувача, але dry-run все одно не виконує реальну дію. Перемикається в User Risk panel і JSON.
 - `UserRisk.StrictMonitoringMinimumSpamCount`: мінімальна кількість repeated/similar messages для strict-monitoring користувачів. Налаштовується в User Risk panel і JSON.
@@ -109,7 +109,7 @@
 - `AdminReview.Enabled`: надсилає review reports для moderation actions.
 - `AdminReview.IncludeDeletedMessageQuote`: додає коротку цитату deleted content у review report.
 - `AdminReview.IncludeAttachments`: reupload дозволених attachments у review report.
-- `AdminReview.ActionButtonsEnabled`: додає quick action buttons для admins.
+- `AdminReview.ActionButtonsEnabled`: додає доступні лише менеджерам review-дії, зокрема incident-specific **Скасувати / Хибне спрацювання**. Відновлення скасовує лише strike і покарання цього інциденту, якщо Discord-стан усе ще збігається, а потім відновлює видалений текст як чітко позначене повідомлення бота. Звичайні учасники не отримують і не використовують жодних взаємодій для цієї функції.
 - `AdminReview.MaxReuploadedImages`: максимальна кількість images у review report.
 - `AdminReview.MaxAttachmentBytes`: максимальний розмір attachment, який бот reupload.
 
@@ -134,7 +134,7 @@
 
 ## Access
 
-- `Access.OwnerOnlyBootstrap`: коли true, тільки server owner може завершити setup до `SetupCompleted`. Це поведінка `main`.
+- `Access.OwnerOnlyBootstrap`: коли true, тільки server owner може завершити setup до `SetupCompleted`. У цій гілці значення за замовчуванням `false`, тому початкове налаштування може виконати server owner або Discord administrator.
 - `Access.AllowDiscordAdministratorsAfterSetup`: коли true, Discord administrators можуть керувати ботом після setup.
 - `Access.CommandVisibility`: керує видимістю slash-команд.
   - `AdministratorOnly`: Discord показує commands тільки administrators.
