@@ -4,6 +4,7 @@ using AntiSpamBot.Localization;
 using AntiSpamBot.Moderation;
 using AntiSpamBot.Services;
 using Discord;
+using Discord.Net;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -138,7 +139,8 @@ public sealed class DiscordEventHandler(
                     if (component.User is SocketGuildUser componentUser)
                     {
                         var settings = await settingsStore.GetAsync(componentUser.Guild.Id);
-                        if (await moderation.HandleComponentAsync(component, settings))
+                        var moderationHandled = await moderation.HandleComponentAsync(component, settings);
+                        if (!InteractionResponseFlow.ShouldPassToSetupUi(moderationHandled))
                         {
                             break;
                         }
@@ -154,11 +156,50 @@ public sealed class DiscordEventHandler(
         catch (Exception exception)
         {
             logger.LogError(exception, "Interaction processing failed.");
+            await TryReportInteractionErrorAsync(interaction);
+        }
+    }
 
-            if (!interaction.HasResponded)
-            {
-                await interaction.RespondAsync("An internal error occurred while processing this interaction.", ephemeral: true);
-            }
+    private async Task TryReportInteractionErrorAsync(SocketInteraction interaction)
+    {
+        var operation = InteractionResponseFlow.GetErrorResponseOperation(
+            interaction.HasResponded,
+            interaction.CreatedAt,
+            DateTimeOffset.UtcNow);
+        if (operation == InteractionResponseOperation.None)
+        {
+            logger.LogWarning(
+                "Could not report the processing failure for interaction {InteractionId} because its initial response window expired.",
+                interaction.Id);
+            return;
+        }
+
+        try
+        {
+            await InteractionResponseFlow.ExecuteAsync(
+                interaction,
+                operation,
+                "An internal error occurred while processing this interaction.");
+        }
+        catch (TimeoutException)
+        {
+            logger.LogWarning(
+                "Could not report the processing failure for interaction {InteractionId} because the interaction expired.",
+                interaction.Id);
+        }
+        catch (HttpException exception) when ((int?)exception.DiscordCode is 10062 or 10015)
+        {
+            logger.LogWarning(
+                "Could not report the processing failure for interaction {InteractionId} because Discord no longer accepts its token (code {DiscordCode}).",
+                interaction.Id,
+                (int?)exception.DiscordCode);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed to report the processing failure for interaction {InteractionId}.",
+                interaction.Id);
         }
     }
 
