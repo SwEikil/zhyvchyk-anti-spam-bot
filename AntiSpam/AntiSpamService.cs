@@ -47,7 +47,12 @@ public sealed class AntiSpamService(
                 .OrderBy(item => item.Timestamp)
                 .ToArray();
 
-            return Detect(recent, tracked, message.Author as SocketGuildUser, settings);
+            var user = message.Author as SocketGuildUser;
+            var userRisk = user is not null
+                ? userRiskService.Evaluate(user, tracked.Urls.Count > 0, settings.UserRisk)
+                : UserRiskEvaluation.None;
+            var threatLevel = threatService.GetCurrentLevel(guildId, settings);
+            return Detect(recent, tracked, settings, userRisk, threatLevel);
         }
     }
 
@@ -77,13 +82,22 @@ public sealed class AntiSpamService(
         }
     }
 
-    private SpamDetectionResult Detect(IReadOnlyList<TrackedMessage> recent, TrackedMessage current, SocketGuildUser? user, GuildSettings settings)
+    internal SpamDetectionResult InspectTracked(
+        IReadOnlyList<TrackedMessage> recent,
+        TrackedMessage current,
+        GuildSettings settings,
+        UserRiskEvaluation userRisk,
+        ThreatLevel threatLevel = ThreatLevel.Normal) =>
+        Detect(recent, current, settings, userRisk, threatLevel);
+
+    private SpamDetectionResult Detect(
+        IReadOnlyList<TrackedMessage> recent,
+        TrackedMessage current,
+        GuildSettings settings,
+        UserRiskEvaluation userRisk,
+        ThreatLevel threatLevel)
     {
         var detection = settings.Detection;
-        var threatLevel = threatService.GetCurrentLevel(current.GuildId, settings);
-        var userRisk = user is not null
-            ? userRiskService.Evaluate(user, current.Urls.Count > 0, settings.UserRisk)
-            : UserRiskEvaluation.None;
         var thresholds = CalculateEffectiveThresholds(detection, settings.UserRisk, threatLevel, userRisk);
         var minimumSpamCount = thresholds.MinimumSpamCount;
         var maxMessagesBeforePunishment = thresholds.MaxMessagesBeforePunishment;
@@ -114,21 +128,6 @@ public sealed class AntiSpamService(
                 "reason_suspicious_attachment",
                 new Dictionary<string, string> { ["extensions"] = string.Join(", ", suspiciousExtensions) },
                 userRisk);
-        }
-
-        if (user is not null)
-        {
-            if (userRisk.Score >= settings.UserRisk.PunishAtScore)
-            {
-                return CreateResult(
-                    SpamTriggerType.UserRisk,
-                    $"user risk score {userRisk.Score}: {userRisk.Reason}",
-                    1.0,
-                    [current],
-                    "reason_user_risk",
-                    new Dictionary<string, string> { ["score"] = userRisk.Score.ToString(), ["details"] = userRisk.Reason },
-                    userRisk);
-            }
         }
 
         // Burst checks run before content similarity so coordinated cross-channel floods are stopped
@@ -289,7 +288,10 @@ public sealed class AntiSpamService(
             var strictMinimum = Math.Max(2, userRisk.StrictMonitoringMinimumSpamCount);
             strictMinimum = Math.Min(strictMinimum, minimumSpamCount);
             minimumSpamCount = Math.Min(minimumSpamCount, strictMinimum);
-            maxMessagesBeforePunishment = Math.Min(maxMessagesBeforePunishment, Math.Max(minimumSpamCount, strictMinimum + 1));
+            // Strict monitoring can confirm repeated content sooner, but it never lowers the
+            // configured ordinary-burst threshold below four messages. Account/join context is
+            // never a standalone signal.
+            maxMessagesBeforePunishment = Math.Min(maxMessagesBeforePunishment, Math.Max(4, strictMinimum + 2));
         }
 
         return new EffectiveDetectionThresholds(minimumSpamCount, maxMessagesBeforePunishment, similarityThreshold);

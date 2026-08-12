@@ -28,6 +28,7 @@ public interface IModerationService
 public sealed class ModerationService(
     IUserStrikeStore strikeStore,
     ITempBanStore tempBanStore,
+    IModerationIncidentStore incidentStore,
     IAccessControlService accessControl,
     ITextLocalizer localizer,
     ILocalModerationLogService localLogs,
@@ -50,6 +51,16 @@ public sealed class ModerationService(
         GuildSettings settings,
         CancellationToken cancellationToken = default)
     {
+        if (!detection.HasActionableTrigger)
+        {
+            logger.LogWarning(
+                "Ignored non-actionable anti-spam result for user {UserId} in guild {GuildId}: {TriggerType}.",
+                user.Id,
+                guild.Id,
+                detection.TriggerType);
+            return;
+        }
+
         var existingStrike = await strikeStore.GetAsync(guild.Id, user.Id, cancellationToken);
         var isPunishmentCooldownActive = existingStrike is not null &&
             settings.Punishment.CooldownSeconds > 0 &&
@@ -80,16 +91,23 @@ public sealed class ModerationService(
                 localizer.Get(settings, "punishment_dry_run"),
                 reason,
                 Array.Empty<ReportAttachment>(),
-                (existingStrike?.DetectionCount ?? 0) + 1);
+                (existingStrike?.DetectionCount ?? 0) + 1,
+                incidentId: null);
             return;
         }
+
+        var incident = CreateIncident(guild.Id, user.Id, detection, existingStrike);
+        await incidentStore.CreateAsync(incident, cancellationToken);
 
         var reportAttachments = settings.AdminReview.Enabled && settings.AdminReview.IncludeAttachments
             ? await DownloadReportAttachmentsAsync(detection, settings, cancellationToken)
             : new List<ReportAttachment>();
         try
         {
-            var deletedCount = await DeleteDetectedMessagesAsync(guild, detection, cancellationToken);
+            var deletedMessageIds = await DeleteDetectedMessagesAsync(guild, detection, cancellationToken);
+            var deletedCount = deletedMessageIds.Count;
+            incident.DeletedMessageIds = deletedMessageIds;
+            await incidentStore.UpdateAsync(incident, cancellationToken);
 
             if (isPunishmentCooldownActive)
             {
@@ -104,19 +122,34 @@ public sealed class ModerationService(
                     localizer.Get(settings, "punishment_cooldown"),
                     reason,
                     reportAttachments,
-                    existingStrike?.DetectionCount ?? 1);
+                    existingStrike?.DetectionCount ?? 1,
+                    incident.IncidentId);
                 return;
             }
 
-            var strike = await strikeStore.RegisterDetectionAsync(guild.Id, user.Id, cancellationToken);
+            var strike = await strikeStore.RegisterDetectionAsync(guild.Id, user.Id, incident.IncidentId, cancellationToken);
+            incident.StrikeRegistered = true;
+            incident.ReviewDetectionCount = strike.DetectionCount;
+            await incidentStore.UpdateAsync(incident, cancellationToken);
+            var actionReason = AppendIncidentMarker(reason, incident);
             if (ShouldAutoBanMultiChannelDuplicate(settings, detection) &&
                 settings.Punishment.BanAfterDetections > 0 &&
                 strike.DetectionCount >= settings.Punishment.BanAfterDetections)
             {
-                var autoBanPunishment = await BanUserAsync(guild, user.Id, user, settings, reason, cancellationToken);
-                await strikeStore.SetLastPunishmentAsync(guild.Id, user.Id, DateTimeOffset.UtcNow, cancellationToken);
+                var appliedAt = DateTimeOffset.UtcNow;
+                var autoBanPunishment = await BanUserAsync(guild, user.Id, user, settings, actionReason, cancellationToken);
+                incident.PunishmentType = ModerationPunishmentTypes.PermanentBan;
+                incident.PunishmentAppliedAt = appliedAt;
+                await strikeStore.SetLastPunishmentAsync(
+                    guild.Id,
+                    user.Id,
+                    DateTimeOffset.UtcNow,
+                    cancellationToken,
+                    incident.IncidentId);
+                await incidentStore.UpdateAsync(incident, cancellationToken);
                 await localLogs.WriteAsync(guild.Id, settings, "moderation_action", new
                 {
+                    incidentId = incident.IncidentId,
                     userId = user.Id,
                     user = user.Username,
                     detection.TriggerType,
@@ -130,16 +163,26 @@ public sealed class ModerationService(
                     detectionCount = strike.DetectionCount,
                     channels = detection.AffectedChannelIds
                 }, cancellationToken);
-                await SendLogAsync(guild, user, settings, detection, deletedCount, autoBanPunishment, reason, reportAttachments, strike.DetectionCount);
+                await SendLogAsync(guild, user, settings, detection, deletedCount, autoBanPunishment, reason, reportAttachments, strike.DetectionCount, incident.IncidentId);
                 return;
             }
 
             var forceStrictTimeout = ShouldApplyStrictMonitoringTimeout(settings, detection);
-            var punishment = await ApplyPunishmentAsync(guild, user, settings, strike, reason, forceStrictTimeout, cancellationToken);
+            var punishment = await ApplyPunishmentAsync(guild, user, settings, strike, actionReason, forceStrictTimeout, incident.IncidentId, cancellationToken);
+            incident.PunishmentType = punishment.Type;
+            incident.PunishmentAppliedAt = punishment.AppliedAt;
+            incident.PunishmentExpiresAt = punishment.ExpiresAt;
 
-            await strikeStore.SetLastPunishmentAsync(guild.Id, user.Id, DateTimeOffset.UtcNow, cancellationToken);
+            await strikeStore.SetLastPunishmentAsync(
+                guild.Id,
+                user.Id,
+                DateTimeOffset.UtcNow,
+                cancellationToken,
+                incident.IncidentId);
+            await incidentStore.UpdateAsync(incident, cancellationToken);
             await localLogs.WriteAsync(guild.Id, settings, "moderation_action", new
             {
+                incidentId = incident.IncidentId,
                 userId = user.Id,
                 user = user.Username,
                 detection.TriggerType,
@@ -148,10 +191,10 @@ public sealed class ModerationService(
                 detection.UserRiskScore,
                 detection.UserRiskDetails,
                 deletedCount,
-                punishment,
+                punishment = punishment.Description,
                 channels = detection.AffectedChannelIds
             }, cancellationToken);
-            await SendLogAsync(guild, user, settings, detection, deletedCount, punishment, reason, reportAttachments, strike.DetectionCount);
+            await SendLogAsync(guild, user, settings, detection, deletedCount, punishment.Description, reason, reportAttachments, strike.DetectionCount, incident.IncidentId);
         }
         finally
         {
@@ -160,6 +203,44 @@ public sealed class ModerationService(
                 await attachment.DisposeAsync();
             }
         }
+    }
+
+    private static ModerationIncident CreateIncident(
+        ulong guildId,
+        ulong userId,
+        SpamDetectionResult detection,
+        UserStrikeState? existingStrike)
+    {
+        var incidentId = Guid.NewGuid().ToString("N");
+        return new ModerationIncident
+        {
+            IncidentId = incidentId,
+            GuildId = guildId,
+            TargetUserId = userId,
+            TriggerType = detection.TriggerType,
+            DetectedAt = DateTimeOffset.UtcNow,
+            Messages = detection.Messages
+                .GroupBy(item => item.MessageId)
+                .Select(group => group.First())
+                .Select(item => new ModerationIncidentMessage
+                {
+                    ChannelId = item.ChannelId,
+                    MessageId = item.MessageId,
+                    RawContent = item.RawContent,
+                    Attachments = item.Attachments.ToList()
+                })
+                .ToList(),
+            ReviewDetectionCount = (existingStrike?.DetectionCount ?? 0) + 1,
+            PunishmentReasonMarker = $"anti-spam incident:{incidentId}"
+        };
+    }
+
+    private static string AppendIncidentMarker(string reason, ModerationIncident incident)
+    {
+        var suffix = $" [{incident.PunishmentReasonMarker}]";
+        var maxReasonLength = Math.Max(0, 512 - suffix.Length);
+        var prefix = reason.Length <= maxReasonLength ? reason : reason[..maxReasonLength];
+        return prefix + suffix;
     }
 
     public async Task<bool> HandleComponentAsync(SocketMessageComponent component, GuildSettings settings, CancellationToken cancellationToken = default)
@@ -176,9 +257,31 @@ public sealed class ModerationService(
         }
 
         var parts = component.Data.CustomId.Split(':');
-        if (parts.Length != 3 || !ulong.TryParse(parts[2], out var targetUserId))
+        if (parts.Length != 3)
         {
-            await component.RespondAsync("Invalid moderation action.", ephemeral: true);
+            await component.RespondAsync(localizer.Get(settings, "moderation_action_invalid"), ephemeral: true);
+            return true;
+        }
+
+        if (parts[1].Equals("falsepositive", StringComparison.Ordinal))
+        {
+            await HandleFalsePositiveAsync(component, actor, settings, parts[2], cancellationToken);
+            return true;
+        }
+
+        var incident = await incidentStore.GetAsync(actor.Guild.Id, parts[2], cancellationToken);
+        var hasLegacyTarget = ulong.TryParse(parts[2], out var legacyTargetUserId);
+        var targetUserId = incident?.TargetUserId ?? legacyTargetUserId;
+        if (incident is null && !hasLegacyTarget)
+        {
+            await component.RespondAsync(localizer.Get(settings, "moderation_incident_not_found"), ephemeral: true);
+            return true;
+        }
+
+        if (incident is not null &&
+            !incident.Status.Equals(ModerationIncidentStatuses.Active, StringComparison.OrdinalIgnoreCase))
+        {
+            await component.RespondAsync(localizer.Get(settings, "false_positive_already_handled"), ephemeral: true);
             return true;
         }
 
@@ -199,7 +302,7 @@ public sealed class ModerationService(
 
         if (string.IsNullOrWhiteSpace(result))
         {
-            await component.RespondAsync("Could not apply moderation action. The user may no longer be in the server.", ephemeral: true);
+            await component.RespondAsync(localizer.Get(settings, "moderation_action_failed"), ephemeral: true);
             return true;
         }
 
@@ -213,8 +316,97 @@ public sealed class ModerationService(
         }, cancellationToken);
         await strikeStore.SetLastPunishmentAsync(actor.Guild.Id, targetUserId, DateTimeOffset.UtcNow, cancellationToken);
 
-        await component.RespondAsync($"Applied action: `{SanitizeForReport(result)}` to user `{targetUserId}`.", ephemeral: true);
+        await component.RespondAsync(localizer.Format(settings, "moderation_action_applied", new Dictionary<string, string>
+        {
+            ["result"] = SanitizeForReport(result),
+            ["userId"] = targetUserId.ToString()
+        }), ephemeral: true);
         return true;
+    }
+
+    private async Task HandleFalsePositiveAsync(
+        SocketMessageComponent component,
+        SocketGuildUser actor,
+        GuildSettings settings,
+        string incidentId,
+        CancellationToken cancellationToken)
+    {
+        var claim = await incidentStore.TryClaimFalsePositiveAsync(
+            actor.Guild.Id,
+            incidentId,
+            actor.Id,
+            cancellationToken);
+        if (claim.Result == IncidentClaimResult.NotFound || claim.Incident is null)
+        {
+            await component.RespondAsync(localizer.Get(settings, "moderation_incident_not_found"), ephemeral: true);
+            return;
+        }
+
+        if (claim.Result == IncidentClaimResult.AlreadyHandled)
+        {
+            await component.RespondAsync(localizer.Get(settings, "false_positive_already_handled"), ephemeral: true);
+            return;
+        }
+
+        var incident = claim.Incident;
+        if (incident.StrikeRegistered)
+        {
+            if (await strikeStore.ReverseDetectionAsync(
+                    incident.GuildId,
+                    incident.TargetUserId,
+                    incident.IncidentId,
+                    cancellationToken))
+            {
+                incident.RevertedParts.Add("strike");
+            }
+            else
+            {
+                incident.UnrevertedParts.Add("strike_not_active");
+            }
+        }
+
+        await TryUndoPunishmentAsync(actor.Guild, incident, cancellationToken);
+        await RestoreDeletedMessagesAsync(actor.Guild, incident, settings, cancellationToken);
+
+        incident.Status = ModerationIncidentStatuses.FalsePositive;
+        await incidentStore.UpdateAsync(incident, cancellationToken);
+
+        var restored = incident.RestoredMessageIds.Count;
+        var revertedText = incident.RevertedParts.Count == 0
+            ? localizer.Get(settings, "false_positive_none")
+            : string.Join(", ", incident.RevertedParts.Select(part => LocalizeRecoveryPart(settings, part)));
+        var failedText = incident.UnrevertedParts.Count == 0
+            ? localizer.Get(settings, "false_positive_none")
+            : string.Join(", ", incident.UnrevertedParts.Select(part => LocalizeRecoveryPart(settings, part)));
+        var response = localizer.Format(settings, "false_positive_result", new Dictionary<string, string>
+        {
+            ["incidentId"] = incident.IncidentId,
+            ["reverted"] = revertedText,
+            ["restored"] = restored.ToString(),
+            ["failed"] = failedText
+        });
+
+        await localLogs.WriteAsync(actor.Guild.Id, settings, "false_positive_recovery", new
+        {
+            incidentId = incident.IncidentId,
+            originalTrigger = incident.TriggerType,
+            userId = incident.TargetUserId,
+            moderatorId = actor.Id,
+            moderator = actor.Username,
+            reverted = incident.RevertedParts,
+            messageRestored = restored > 0,
+            restoredCount = restored,
+            couldNotRevert = incident.UnrevertedParts,
+            logText = localizer.Format(settings, "false_positive_log_text", new Dictionary<string, string>
+            {
+                ["incidentId"] = incident.IncidentId,
+                ["userId"] = incident.TargetUserId.ToString(),
+                ["moderatorId"] = actor.Id.ToString()
+            }),
+            summary = response
+        }, cancellationToken);
+
+        await component.RespondAsync(response, ephemeral: true);
     }
 
     public Task RemoveTimeoutAsync(SocketGuildUser user, string reason, CancellationToken cancellationToken = default) =>
@@ -223,9 +415,228 @@ public sealed class ModerationService(
             AuditLogReason = string.IsNullOrWhiteSpace(reason) ? "Manual anti-spam unmute" : reason
         });
 
-    private async Task<int> DeleteDetectedMessagesAsync(SocketGuild guild, SpamDetectionResult detection, CancellationToken cancellationToken)
+    private async Task TryUndoPunishmentAsync(
+        SocketGuild guild,
+        ModerationIncident incident,
+        CancellationToken cancellationToken)
     {
-        var deletedCount = 0;
+        if (incident.PunishmentType.Equals(ModerationPunishmentTypes.None, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (incident.PunishmentType.Equals(ModerationPunishmentTypes.Timeout, StringComparison.OrdinalIgnoreCase))
+        {
+            var target = guild.GetUser(incident.TargetUserId);
+            if (target is null)
+            {
+                incident.UnrevertedParts.Add("timeout_user_missing");
+                return;
+            }
+
+            var currentTimeout = target.TimedOutUntil;
+            if (currentTimeout is null || currentTimeout <= DateTimeOffset.UtcNow)
+            {
+                incident.RevertedParts.Add("timeout_inactive");
+                return;
+            }
+
+            if (!CanSafelyRemoveTimeout(currentTimeout, incident.PunishmentExpiresAt))
+            {
+                incident.UnrevertedParts.Add("timeout_changed");
+                return;
+            }
+
+            try
+            {
+                await target.RemoveTimeOutAsync(new RequestOptions
+                {
+                    AuditLogReason = $"False-positive recovery for anti-spam incident {incident.IncidentId}"
+                });
+                incident.RevertedParts.Add("timeout");
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(exception, "Failed to remove timeout for incident {IncidentId}.", incident.IncidentId);
+                incident.UnrevertedParts.Add("timeout_failed");
+            }
+
+            return;
+        }
+
+        if (incident.PunishmentType is not (ModerationPunishmentTypes.TempBan or ModerationPunishmentTypes.PermanentBan))
+        {
+            incident.UnrevertedParts.Add("punishment_unknown");
+            return;
+        }
+
+        try
+        {
+            var currentBan = await guild.GetBanAsync(incident.TargetUserId);
+            if (currentBan is null)
+            {
+                if (incident.PunishmentType.Equals(ModerationPunishmentTypes.TempBan, StringComparison.OrdinalIgnoreCase))
+                {
+                    await tempBanStore.RemoveIfIncidentAsync(
+                        incident.GuildId,
+                        incident.TargetUserId,
+                        incident.IncidentId,
+                        cancellationToken);
+                }
+
+                incident.RevertedParts.Add("ban_inactive");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(incident.PunishmentReasonMarker) ||
+                currentBan.Reason?.Contains(incident.PunishmentReasonMarker, StringComparison.Ordinal) != true)
+            {
+                incident.UnrevertedParts.Add("ban_changed");
+                return;
+            }
+
+            if (incident.PunishmentType.Equals(ModerationPunishmentTypes.TempBan, StringComparison.OrdinalIgnoreCase))
+            {
+                var tempBan = await tempBanStore.GetAsync(incident.GuildId, incident.TargetUserId, cancellationToken);
+                if (tempBan is null || !tempBan.IncidentId.Equals(incident.IncidentId, StringComparison.Ordinal))
+                {
+                    incident.UnrevertedParts.Add("ban_changed");
+                    return;
+                }
+            }
+
+            await guild.RemoveBanAsync(incident.TargetUserId, new RequestOptions
+            {
+                AuditLogReason = $"False-positive recovery for anti-spam incident {incident.IncidentId}"
+            });
+            if (incident.PunishmentType.Equals(ModerationPunishmentTypes.TempBan, StringComparison.OrdinalIgnoreCase))
+            {
+                await tempBanStore.RemoveIfIncidentAsync(
+                    incident.GuildId,
+                    incident.TargetUserId,
+                    incident.IncidentId,
+                    cancellationToken);
+            }
+
+            incident.RevertedParts.Add("ban");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Failed to remove ban for incident {IncidentId}.", incident.IncidentId);
+            incident.UnrevertedParts.Add("ban_failed");
+        }
+    }
+
+    internal static bool CanSafelyRemoveTimeout(DateTimeOffset? currentTimeout, DateTimeOffset? incidentTimeout) =>
+        currentTimeout is not null &&
+        incidentTimeout is not null &&
+        currentTimeout.Value.Equals(incidentTimeout.Value);
+
+    private async Task RestoreDeletedMessagesAsync(
+        SocketGuild guild,
+        ModerationIncident incident,
+        GuildSettings settings,
+        CancellationToken cancellationToken)
+    {
+        foreach (var message in incident.Messages.Where(item => incident.DeletedMessageIds.Contains(item.MessageId)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (incident.RestoredMessageIds.ContainsKey(message.MessageId))
+            {
+                continue;
+            }
+
+            var channel = guild.GetTextChannel(message.ChannelId);
+            if (channel is null)
+            {
+                incident.UnrevertedParts.Add($"message_channel_missing:{message.ChannelId}");
+                continue;
+            }
+
+            var text = BuildRestoredMessageText(settings, incident.TargetUserId, message.RawContent);
+            var attachments = settings.AdminReview.IncludeAttachments
+                ? await DownloadReportAttachmentsAsync(message.Attachments, settings, cancellationToken)
+                : [];
+            try
+            {
+                IUserMessage restored;
+                var allowedMentions = BuildRestoredAllowedMentions(incident.TargetUserId);
+                if (attachments.Count > 0)
+                {
+                    var files = attachments.Select(item => new FileAttachment(item.Stream, item.FileName)).ToArray();
+                    restored = await channel.SendFilesAsync(
+                        files,
+                        text: text,
+                        allowedMentions: allowedMentions,
+                        flags: MessageFlags.SuppressEmbeds);
+                }
+                else
+                {
+                    restored = await channel.SendMessageAsync(
+                        text,
+                        allowedMentions: allowedMentions,
+                        flags: MessageFlags.SuppressEmbeds);
+                }
+
+                incident.RestoredMessageIds[message.MessageId] = restored.Id;
+                incident.RevertedParts.Add($"message:{message.MessageId}");
+                await incidentStore.UpdateAsync(incident, cancellationToken);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(
+                    exception,
+                    "Failed to restore message {MessageId} for incident {IncidentId}.",
+                    message.MessageId,
+                    incident.IncidentId);
+                incident.UnrevertedParts.Add($"message_failed:{message.MessageId}");
+            }
+            finally
+            {
+                foreach (var attachment in attachments)
+                {
+                    await attachment.DisposeAsync();
+                }
+            }
+        }
+    }
+
+    internal string BuildRestoredMessageText(GuildSettings settings, ulong userId, string rawContent)
+    {
+        var content = string.IsNullOrWhiteSpace(rawContent) ? localizer.Get(settings, "empty") : rawContent;
+        var prefix = localizer.Format(settings, "false_positive_restored_message", new Dictionary<string, string>
+        {
+            ["user"] = $"<@{userId}>",
+            ["message"] = ""
+        }).TrimEnd();
+        var available = Math.Max(0, 2000 - prefix.Length - 1);
+        if (content.Length > available)
+        {
+            content = available >= 3 ? content[..(available - 3)] + "..." : "";
+        }
+
+        return localizer.Format(settings, "false_positive_restored_message", new Dictionary<string, string>
+        {
+            ["user"] = $"<@{userId}>",
+            ["message"] = content
+        });
+    }
+
+    internal static AllowedMentions BuildRestoredAllowedMentions(ulong userId) =>
+        new(null)
+        {
+            UserIds = new List<ulong> { userId }
+        };
+
+    private string LocalizeRecoveryPart(GuildSettings settings, string part)
+    {
+        var key = part.Split(':', 2)[0];
+        return localizer.Get(settings, $"false_positive_part_{key}");
+    }
+
+    private async Task<HashSet<ulong>> DeleteDetectedMessagesAsync(SocketGuild guild, SpamDetectionResult detection, CancellationToken cancellationToken)
+    {
+        var deletedMessageIds = new HashSet<ulong>();
         CleanupDeleteAttempts();
 
         foreach (var tracked in detection.Messages)
@@ -245,7 +656,7 @@ public sealed class ModerationService(
                 }
 
                 await channel.DeleteMessageAsync(tracked.MessageId);
-                deletedCount++;
+                deletedMessageIds.Add(tracked.MessageId);
             }
             catch (HttpException exception) when ((int?)exception.DiscordCode == 10008)
             {
@@ -261,7 +672,7 @@ public sealed class ModerationService(
             }
         }
 
-        return deletedCount;
+        return deletedMessageIds;
     }
 
     private void CleanupDeleteAttempts()
@@ -276,13 +687,14 @@ public sealed class ModerationService(
         }
     }
 
-    private async Task<string> ApplyPunishmentAsync(
+    private async Task<PunishmentOutcome> ApplyPunishmentAsync(
         SocketGuild guild,
         SocketGuildUser user,
         GuildSettings settings,
         UserStrikeState strike,
         string reason,
         bool forceTimeout,
+        string incidentId,
         CancellationToken cancellationToken)
     {
         if (settings.Punishment.EnableBan &&
@@ -291,20 +703,47 @@ public sealed class ModerationService(
         {
             if (settings.Punishment.EnablePermanentBan)
             {
-                return await BanUserAsync(guild, user.Id, user, settings, reason, cancellationToken);
+                var banAppliedAt = DateTimeOffset.UtcNow;
+                var banDescription = await BanUserAsync(guild, user.Id, user, settings, reason, cancellationToken);
+                return new PunishmentOutcome(ModerationPunishmentTypes.PermanentBan, banDescription, banAppliedAt, null);
             }
 
             var tempBanDuration = GetTempBanDuration(settings, strike.DetectionCount);
-            return await TempBanUserAsync(guild, user.Id, user, settings, tempBanDuration, reason, cancellationToken);
+            var tempBanAppliedAt = DateTimeOffset.UtcNow;
+            var tempBanDescription = await TempBanUserAsync(
+                guild,
+                user.Id,
+                user,
+                settings,
+                tempBanDuration,
+                reason,
+                cancellationToken,
+                incidentId);
+            return new PunishmentOutcome(
+                ModerationPunishmentTypes.TempBan,
+                tempBanDescription,
+                tempBanAppliedAt,
+                tempBanAppliedAt.Add(tempBanDuration));
         }
 
         if (!settings.Punishment.EnableTimeout && !forceTimeout)
         {
-            return localizer.Get(settings, "punishment_none");
+            return new PunishmentOutcome(
+                ModerationPunishmentTypes.None,
+                localizer.Get(settings, "punishment_none"),
+                null,
+                null);
         }
 
         var duration = GetTimeoutDuration(settings, strike.DetectionCount);
-        return await TimeoutUserAsync(user, duration, reason);
+        var appliedAt = DateTimeOffset.UtcNow;
+        var normalizedDuration = NormalizeTimeoutDuration(duration);
+        var description = await TimeoutUserAsync(user, normalizedDuration, reason);
+        return new PunishmentOutcome(
+            ModerationPunishmentTypes.Timeout,
+            description,
+            appliedAt,
+            user.TimedOutUntil ?? DateTimeOffset.UtcNow.Add(normalizedDuration));
     }
 
     private static TimeSpan GetTimeoutDuration(GuildSettings settings, int detectionCount)
@@ -358,7 +797,8 @@ public sealed class ModerationService(
         GuildSettings settings,
         TimeSpan duration,
         string reason,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string incidentId = "")
     {
         var until = DateTimeOffset.UtcNow.Add(duration);
         var record = new TempBanRecord
@@ -368,7 +808,8 @@ public sealed class ModerationService(
             BannedAt = DateTimeOffset.UtcNow,
             ExpiresAt = until,
             Status = TempBanStatuses.Pending,
-            Reason = reason
+            Reason = reason,
+            IncidentId = incidentId
         };
         await tempBanStore.AddAsync(record, cancellationToken);
         if (user is not null)
@@ -402,7 +843,7 @@ public sealed class ModerationService(
             return "";
         }
 
-        var clamped = TimeSpan.FromSeconds(Math.Clamp(duration.TotalSeconds, 1, TimeSpan.FromDays(MaxDiscordTimeoutDays).TotalSeconds));
+        var clamped = NormalizeTimeoutDuration(duration);
         await user.SetTimeOutAsync(clamped, new RequestOptions
         {
             AuditLogReason = reason
@@ -411,27 +852,8 @@ public sealed class ModerationService(
         return $"timeout for {FormatDuration(clamped)}";
     }
 
-    private async Task SendLogAsync(
-        SocketGuild guild,
-        SocketGuildUser user,
-        GuildSettings settings,
-        SpamDetectionResult detection,
-        int deletedCount,
-        string punishment,
-        string reason,
-        IReadOnlyList<ReportAttachment> reportAttachments)
-    {
-        await SendLogAsync(
-            guild,
-            user,
-            settings,
-            detection,
-            deletedCount,
-            punishment,
-            reason,
-            reportAttachments,
-            Math.Max(1, (await strikeStore.GetAsync(guild.Id, user.Id))?.DetectionCount ?? 1));
-    }
+    private static TimeSpan NormalizeTimeoutDuration(TimeSpan duration) =>
+        TimeSpan.FromSeconds(Math.Clamp(duration.TotalSeconds, 1, TimeSpan.FromDays(MaxDiscordTimeoutDays).TotalSeconds));
 
     private async Task SendLogAsync(
         SocketGuild guild,
@@ -442,7 +864,8 @@ public sealed class ModerationService(
         string punishment,
         string reason,
         IReadOnlyList<ReportAttachment> reportAttachments,
-        int reviewDetectionCount)
+        int reviewDetectionCount,
+        string? incidentId)
     {
         var logChannelId = settings.Channels.NotificationChannelId ?? settings.Channels.LogChannelId;
         if (logChannelId is null)
@@ -495,7 +918,7 @@ public sealed class ModerationService(
         }
 
         var builtEmbed = embed.Build();
-        var components = BuildReviewComponents(settings, user.Id, Math.Max(1, reviewDetectionCount));
+        var components = BuildReviewComponents(settings, user.Id, incidentId, Math.Max(1, reviewDetectionCount));
         var text = string.IsNullOrWhiteSpace(ping) ? null : ping;
         var allowedMentions = BuildAllowedMentions(settings);
         try
@@ -559,6 +982,7 @@ public sealed class ModerationService(
     }
 
     public static bool ShouldApplyStrictMonitoringTimeout(GuildSettings settings, SpamDetectionResult detection) =>
+        detection.HasActionableTrigger &&
         detection.StrictMonitoringApplied &&
         settings.UserRisk.StrictMonitoringEnabled &&
         settings.UserRisk.StrictMonitoringTimeoutOnConfirmedSpam &&
@@ -651,7 +1075,7 @@ public sealed class ModerationService(
         return await TimeoutUserAsync(user, GetTimeoutDuration(settings, detectionCount), reason);
     }
 
-    private static MessageComponent? BuildReviewComponents(GuildSettings settings, ulong userId, int detectionCount)
+    private MessageComponent? BuildReviewComponents(GuildSettings settings, ulong userId, string? incidentId, int detectionCount)
     {
         if (!settings.AdminReview.Enabled || !settings.AdminReview.ActionButtonsEnabled)
         {
@@ -661,10 +1085,20 @@ public sealed class ModerationService(
         var nextLabel = $"Apply: {BuildReviewActionLabel(settings, detectionCount)}";
         var escalateLabel = $"Escalate: {BuildReviewActionLabel(settings, detectionCount + 1)}";
 
-        return new ComponentBuilder()
-            .WithButton(TrimButtonLabel(nextLabel), $"{ReviewPrefix}:next:{userId}", ButtonStyle.Primary, row: 0)
-            .WithButton(TrimButtonLabel(escalateLabel), $"{ReviewPrefix}:escalate:{userId}", ButtonStyle.Secondary, row: 0)
-            .Build();
+        var target = string.IsNullOrWhiteSpace(incidentId) ? userId.ToString() : incidentId;
+        var builder = new ComponentBuilder()
+            .WithButton(TrimButtonLabel(nextLabel), $"{ReviewPrefix}:next:{target}", ButtonStyle.Primary, row: 0)
+            .WithButton(TrimButtonLabel(escalateLabel), $"{ReviewPrefix}:escalate:{target}", ButtonStyle.Secondary, row: 0);
+        if (!string.IsNullOrWhiteSpace(incidentId))
+        {
+            builder.WithButton(
+                TrimButtonLabel(localizer.Get(settings, "false_positive_button")),
+                $"{ReviewPrefix}:falsepositive:{incidentId}",
+                ButtonStyle.Success,
+                row: 1);
+        }
+
+        return builder.Build();
     }
 
     private static string BuildReviewActionLabel(GuildSettings settings, int detectionCount)
@@ -718,6 +1152,15 @@ public sealed class ModerationService(
     private async Task<List<ReportAttachment>> DownloadReportAttachmentsAsync(
         SpamDetectionResult detection,
         GuildSettings settings,
+        CancellationToken cancellationToken) =>
+        await DownloadReportAttachmentsAsync(
+            detection.Messages.SelectMany(item => item.Attachments),
+            settings,
+            cancellationToken);
+
+    private async Task<List<ReportAttachment>> DownloadReportAttachmentsAsync(
+        IEnumerable<TrackedAttachment> sourceAttachments,
+        GuildSettings settings,
         CancellationToken cancellationToken)
     {
         var maxCount = Math.Clamp(settings.AdminReview.MaxReuploadedImages, 0, 10);
@@ -728,8 +1171,7 @@ public sealed class ModerationService(
 
         var maxBytes = Math.Clamp(settings.AdminReview.MaxAttachmentBytes, 1, 25 * 1024 * 1024);
         var result = new List<ReportAttachment>();
-        foreach (var attachment in detection.Messages
-            .SelectMany(item => item.Attachments)
+        foreach (var attachment in sourceAttachments
             .Where(item => item.IsImage && item.Size <= maxBytes)
             .GroupBy(item => item.Url)
             .Select(group => group.First())
@@ -921,4 +1363,10 @@ public sealed class ModerationService(
 
         public ValueTask DisposeAsync() => Stream.DisposeAsync();
     }
+
+    private sealed record PunishmentOutcome(
+        string Type,
+        string Description,
+        DateTimeOffset? AppliedAt,
+        DateTimeOffset? ExpiresAt);
 }

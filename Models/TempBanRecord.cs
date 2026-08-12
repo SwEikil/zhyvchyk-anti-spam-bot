@@ -8,6 +8,7 @@ public sealed class TempBanRecord
     public DateTimeOffset ExpiresAt { get; set; }
     public string Status { get; set; } = TempBanStatuses.Active;
     public string Reason { get; set; } = "";
+    public string IncidentId { get; set; } = "";
 }
 
 public static class TempBanStatuses

@@ -27,7 +27,7 @@ public sealed class GuildSettings
 
 public sealed class AccessSettings
 {
-    public bool OwnerOnlyBootstrap { get; set; } = true;
+    public bool OwnerOnlyBootstrap { get; set; }
     public bool AllowDiscordAdministratorsAfterSetup { get; set; } = true;
     public CommandVisibilityMode CommandVisibility { get; set; } = CommandVisibilityMode.AdministratorOnly;
     public HashSet<ulong> ManagerRoleIds { get; set; } = [];
@@ -122,6 +122,8 @@ public sealed class UserRiskSettings
     public int RecentJoinMinutes { get; set; } = 10;
     public int NewAccountAgeDays { get; set; } = 60;
     public int RecentJoinDays { get; set; } = 60;
+    // Kept only so older JSON configuration continues to deserialize. Risk scores are contextual
+    // and this value is not an actionable punishment threshold.
     public int PunishAtScore { get; set; } = 70;
     public int NewAccountScore { get; set; } = 35;
     public int RecentJoinScore { get; set; } = 30;

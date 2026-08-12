@@ -62,6 +62,6 @@ dotnet run
 /setup
 ```
 
-До завершення setup доступ має server owner. Після setup ботом можуть керувати administrators і налаштовані manager roles залежно від command visibility.
+До завершення setup у цій гілці доступ має server owner або Discord administrator. Після setup ботом можуть керувати administrators і налаштовані manager roles залежно від command visibility.
 
 Після setup запустіть `/status`, щоб перевірити активні defaults, а потім використовуйте `/antispam` для control panel. Детальне пояснення всіх параметрів є в [Налаштуваннях](configuration.md), а повний список slash-команд - у [Командах](commands.md).

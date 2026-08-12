@@ -53,11 +53,15 @@ public sealed class ThreatService : IThreatService
 
     public ThreatLevel ObserveDetection(ulong guildId, SpamDetectionResult detection, GuildSettings settings)
     {
+        if (!detection.HasActionableTrigger)
+        {
+            return GetCurrentLevel(guildId, settings);
+        }
+
         var score = detection.TriggerType switch
         {
             SpamTriggerType.FastMultiChannelPosting => 3,
             SpamTriggerType.ScamLink => 2,
-            SpamTriggerType.UserRisk => 2,
             SpamTriggerType.SuspiciousAttachment => 2,
             _ => 1
         };

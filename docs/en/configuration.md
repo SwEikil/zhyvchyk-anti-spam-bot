@@ -89,11 +89,11 @@ Most server settings can be changed from `/antispam`. Advanced values are stored
 - `UserRisk.RecentJoinDays`: members who joined within this window receive risk points and strict monitoring. Default is `60`. Configurable from the User Risk panel and JSON.
 - `UserRisk.NewAccountAgeHours`: legacy account-age window kept for older JSON configs.
 - `UserRisk.RecentJoinMinutes`: legacy recent-join window kept for older JSON configs.
-- `UserRisk.PunishAtScore`: score at which user-risk context can push an event into punishment.
+- `UserRisk.PunishAtScore`: legacy compatibility field. User risk is contextual and never causes punishment by itself.
 - `UserRisk.NewAccountScore`: points added for a new account. Advanced JSON setting.
 - `UserRisk.RecentJoinScore`: points added for a recent join. Advanced JSON setting.
 - `UserRisk.FirstMessageLinkScore`: points added when a user's first observed message contains a link. Advanced JSON setting.
-- `UserRisk.StrictMonitoringEnabled`: lowers spam thresholds for fresh accounts or recent joins. Toggleable from the User Risk panel and JSON.
+- `UserRisk.StrictMonitoringEnabled`: lowers repeated-pattern thresholds for fresh accounts or recent joins. It cannot turn account age or join time into a spam trigger, and a single ordinary message always passes. Toggleable from the User Risk panel and JSON.
 - `UserRisk.StrictMonitoringScoreBonus`: extra points when a user is both a fresh account and a recent join. Advanced JSON setting.
 - `UserRisk.StrictMonitoringTimeoutOnConfirmedSpam`: applies timeout when confirmed spam comes from a strict-monitoring user, while still respecting dry-run. Toggleable from the User Risk panel and JSON.
 - `UserRisk.StrictMonitoringMinimumSpamCount`: minimum repeated/similar message count used for strict-monitoring users. Configurable from the User Risk panel and JSON.
@@ -109,7 +109,7 @@ Most server settings can be changed from `/antispam`. Advanced values are stored
 - `AdminReview.Enabled`: sends review reports for moderation actions.
 - `AdminReview.IncludeDeletedMessageQuote`: includes a short quote of deleted content in the review report.
 - `AdminReview.IncludeAttachments`: reuploads allowed attachments into the review report.
-- `AdminReview.ActionButtonsEnabled`: adds quick action buttons for admins.
+- `AdminReview.ActionButtonsEnabled`: adds manager-only review actions, including incident-specific **Undo / False positive** recovery. Recovery reverses only the incident's own strike and punishment when Discord state still matches, then restores deleted content as a clearly labeled bot message. Ordinary members do not receive or use any interaction for this feature.
 - `AdminReview.MaxReuploadedImages`: maximum number of images attached to a review report.
 - `AdminReview.MaxAttachmentBytes`: maximum attachment size the bot will reupload.
 
@@ -134,7 +134,7 @@ Most server settings can be changed from `/antispam`. Advanced values are stored
 
 ## Access
 
-- `Access.OwnerOnlyBootstrap`: when true, only the server owner can complete setup before `SetupCompleted`. This is the `main` behavior.
+- `Access.OwnerOnlyBootstrap`: when true, only the server owner can complete setup before `SetupCompleted`. This branch defaults to `false`, allowing the server owner or a Discord administrator to bootstrap setup.
 - `Access.AllowDiscordAdministratorsAfterSetup`: when true, Discord administrators can manage the bot after setup.
 - `Access.CommandVisibility`: controls slash-command visibility.
   - `AdministratorOnly`: Discord only shows commands to administrators.
