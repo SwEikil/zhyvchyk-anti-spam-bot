@@ -134,7 +134,7 @@
 
 ## Access
 
-- `Access.OwnerOnlyBootstrap`: коли true, тільки server owner може завершити setup до `SetupCompleted`. У цій гілці значення за замовчуванням `false`, тому початкове налаштування може виконати server owner або Discord administrator.
+- `Access.OwnerOnlyBootstrap`: коли true, тільки server owner може завершити setup до `SetupCompleted`. Це поведінка `main`.
 - `Access.AllowDiscordAdministratorsAfterSetup`: коли true, Discord administrators можуть керувати ботом після setup.
 - `Access.CommandVisibility`: керує видимістю slash-команд.
   - `AdministratorOnly`: Discord показує commands тільки administrators.

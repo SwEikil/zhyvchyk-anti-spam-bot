@@ -27,7 +27,7 @@ public sealed class GuildSettings
 
 public sealed class AccessSettings
 {
-    public bool OwnerOnlyBootstrap { get; set; }
+    public bool OwnerOnlyBootstrap { get; set; } = true;
     public bool AllowDiscordAdministratorsAfterSetup { get; set; } = true;
     public CommandVisibilityMode CommandVisibility { get; set; } = CommandVisibilityMode.AdministratorOnly;
     public HashSet<ulong> ManagerRoleIds { get; set; } = [];

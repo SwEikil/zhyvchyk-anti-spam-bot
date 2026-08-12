@@ -22,13 +22,13 @@ public sealed class BootstrapAuthorizationTests
     }
 
     [Fact]
-    public void DiscordAdministrator_CanPerformInitialSetupOnAdminBootstrapVariant()
+    public void DiscordAdministrator_CannotPerformInitialSetupOnMain()
     {
         var settings = GuildSettings.CreateDefault();
 
         Assert.False(settings.SetupCompleted);
-        Assert.False(settings.Access.OwnerOnlyBootstrap);
-        Assert.True(AccessControlService.CanConfigure(
+        Assert.True(settings.Access.OwnerOnlyBootstrap);
+        Assert.False(AccessControlService.CanConfigure(
             userId: 20,
             ownerId: 10,
             isAdministrator: true,

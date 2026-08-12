@@ -6,7 +6,7 @@
     "DefaultSettings": {
       "Language": "en",
       "Access": {
-        "OwnerOnlyBootstrap": false,
+        "OwnerOnlyBootstrap": true,
         "AllowDiscordAdministratorsAfterSetup": true,
         "CommandVisibility": "AdministratorOnly",
         "ManagerRoleIds": []

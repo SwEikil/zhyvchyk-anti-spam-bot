@@ -134,7 +134,7 @@ Most server settings can be changed from `/antispam`. Advanced values are stored
 
 ## Access
 
-- `Access.OwnerOnlyBootstrap`: when true, only the server owner can complete setup before `SetupCompleted`. This branch defaults to `false`, allowing the server owner or a Discord administrator to bootstrap setup.
+- `Access.OwnerOnlyBootstrap`: when true, only the server owner can complete setup before `SetupCompleted`. This is the `main` behavior.
 - `Access.AllowDiscordAdministratorsAfterSetup`: when true, Discord administrators can manage the bot after setup.
 - `Access.CommandVisibility`: controls slash-command visibility.
   - `AdministratorOnly`: Discord only shows commands to administrators.

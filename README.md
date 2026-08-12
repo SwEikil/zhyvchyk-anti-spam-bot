@@ -65,7 +65,7 @@ dotnet restore
 dotnet run
 ```
 
-8. In Discord, run `/setup` as the server owner or a Discord administrator.
+8. In Discord, run `/setup` as the server owner.
 
 ## Docker
 
